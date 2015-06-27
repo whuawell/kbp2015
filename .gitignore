@@ -55,3 +55,12 @@ docs/_build/
 
 # PyBuilder
 target/
+
+*.json
+*.jlist
+*.pkl
+*.txt
+*.lst
+__MACOSX/
+LICENSE
+*.npy
