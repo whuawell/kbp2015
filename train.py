@@ -1,5 +1,5 @@
 """ train.py
-Usage: train.py <data> [--optim=<OPTIM>] [--epoch=<EPOCH>] [--activation=<ACT>] [--hidden=<HID>] [--reg=<REG>]
+Usage: train.py <data> [--optim=<OPTIM>] [--epoch=<EPOCH>] [--activation=<ACT>] [--hidden=<HID>]
                 [--dropout=<RATE>] [--truncate_grad=<STEPs>] [--model=<MODEL>] [--lr=<LR>]
 
 
