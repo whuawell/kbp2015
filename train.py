@@ -149,12 +149,12 @@ if __name__ == '__main__':
 
     from sklearn.metrics import f1_score
 
-    d = {'test_loss': test_loss, 'test_acc': test_acc}
+    d = {'test_loss': test_loss, 'test_acc': test_acc, 'dev_acc': best_acc}
     if mode == 'classification':
         d['test_f1_macro'] = f1_score(targs, preds, average='macro')
         d['test_f1_micro'] = f1_score(targs, preds, average='micro')
     else:
-        d['test_f1'] = f1_score(targs, preds, average='binary')
+        d['test_f1'] = f1_score(targs, preds)
     with open('test.json', 'wb') as f:
         json.dump(d, f)
     with open('test.pkl', 'wb') as f:
