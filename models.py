@@ -12,6 +12,8 @@ from keras.regularizers import *
 import os
 import numpy as np
 
+RNN = GRU
+
 def load_pretrained(word2emb, word_vocab, W):
     for i, word in enumerate(word_vocab.index2word):
         if word in word2emb:
@@ -29,11 +31,11 @@ def sent(vocab, word2emb, num_word, emb_dim, hidden=(300,), dropout=0.5, activat
     net.add(word_emb)
     n_in = emb_dim
     for n_out in hidden[:-1]:
-        net.add(LSTM(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
+        net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
         net.add(Activation(activation))
         n_in = n_out
     n_out = hidden[-1]
-    net.add(LSTM(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
+    net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
 
     if dropout:
         net.add(Dropout(dropout))
