@@ -121,7 +121,7 @@ class AnnotatedData(object):
         return AnnotatedData(splits, vocabs['word'], vocabs['rel'], word2emb)
 
     def generate_batches(self, name, batch_size=128, label='classification', to_one_hot=True):
-        assert label in ['classification', 'filter']
+        assert label in ['classification', 'filter', 'raw']
         split = self.splits[name]
         order = split.lengths.keys()
         random.shuffle(order)
@@ -141,7 +141,7 @@ class AnnotatedData(object):
                 Y = Y[related]
                 if to_one_hot:
                     Y = one_hot(Y, len(self.rel_vocab))
-            else:
+            elif label == 'filter':
                 Y.fill(0.)
                 Y[related] = 1.
                 Y.reshape((-1, 1))
