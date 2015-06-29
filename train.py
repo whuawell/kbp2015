@@ -1,15 +1,13 @@
 """ train.py
 Usage: train.py <data> [--optim=<OPTIM>] [--epoch=<EPOCH>] [--activation=<ACT>] [--hidden=<HID>] [--reg=<REG>]
-                [--dropout=<RATE>] [--mem_dim=<DIM>] [--truncate_grad=<STEPs>] [--model=<MODEL>] [--lr=<LR>]
+                [--dropout=<RATE>] [--truncate_grad=<STEPs>] [--model=<MODEL>] [--lr=<LR>]
 
 
 Options:
     --optim=<OPTIM>     [default: adagrad]
     --epoch=<EPOCH>     [default: 50]
-    --activation=<ACT>  [default: tanh]
-    --hidden=<HID>      [default: 100]
-    --reg=<REG>         [default: 3e-3]
-    --mem_dim=<DIM>         [default: 100]
+    --activation=<ACT>  [default: relu]
+    --hidden=<HID>      [default: 300,300]
     --truncate_grad=<STEPS>     [default: 50]
     --dropout=<RATE>        [default: 0.70]
     --model=<MODEL>         [default: classification]
@@ -17,6 +15,7 @@ Options:
 """
 import cPickle as pkl
 import numpy as np
+np.random.seed(42)
 import os
 import sys
 sys.setrecursionlimit(50000)
@@ -55,17 +54,16 @@ if __name__ == '__main__':
 
     num_rel, num_word = len(dataset.rel_vocab), len(dataset.word_vocab)
     word_emb_dim = len(dataset.word2emb.values()[0])
-    mem_dim = int(args['--mem_dim'])
     hidden = [int(d) for d in args['--hidden'].split(',')]
-    dropout, reg, lr = [float(args[d]) for d in ['--dropout', '--reg', '--lr']]
+    dropout, lr = [float(args[d]) for d in ['--dropout', '--lr']]
     max_epoch, truncate_grad = [int(args[d]) for d in ['--epoch', '--truncate_grad']]
     activation = args['--activation']
     mode = args['--model']
 
     optim = {
-        'adagrad': adagrad(lr=lr),
-        'rmsprop': rmsprop(lr=lr),
-        'sgd': sgd(lr=lr, momentum=0.9, decay=1e-7, nesterov=True),
+        'adagrad': adagrad(lr=lr, clipnorm=5.),
+        'rmsprop': rmsprop(lr=lr, clipnorm=5.),
+        'sgd': sgd(lr=lr, momentum=0.9, decay=1e-7, nesterov=True, clipnorm=5.),
     }[args['--optim']]
 
     model = sent(dataset.word_vocab, dataset.word2emb, num_word, word_emb_dim, hidden, dropout, activation, truncate_grad)
