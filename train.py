@@ -41,8 +41,6 @@ if __name__ == '__main__':
     args = docopt(__doc__)
     pprint(args)
 
-    sys.exit(0)
-
     name = '_'.join([str(args[k]).strip('/').replace('/', '_') for k in sorted(args.keys())])
     todir = os.path.join(mydir, name)
     if not os.path.isdir(todir):
