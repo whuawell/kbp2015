@@ -22,7 +22,7 @@ def sent(vocab, word2emb, num_word, emb_dim, hidden=(300,), dropout=0.5, activat
     n_mem = hidden[0]
     hidden = hidden[1:]
     net = Sequential()
-    word_emb = Embedding(num_word, emb_dim, W_constraint=unitnorm)
+    word_emb = Embedding(num_word, emb_dim)
     W = word_emb.get_weights()[0]
     W = load_pretrained(word2emb, vocab, W)
     word_emb.set_weights([W])

@@ -21,6 +21,7 @@ if __name__ == '__main__':
         reader = csv.reader(f)
         headers = reader.next()
         print headers
+        print dataset.splits['train'] == dataset.splits['dev']
         for i, row in enumerate(reader):
             row = {h:e for h,e in zip(headers,row)}
             if row['entityCharOffsetBegin'] == 'entityCharOffsetBegin':
@@ -34,5 +35,8 @@ if __name__ == '__main__':
 
             if i%5000==0:
                 print 'processed', i
+                for name, split in dataset.splits.items():
+                    print name, len(split.examples),
+                print
 
     dataset.save('annotated')

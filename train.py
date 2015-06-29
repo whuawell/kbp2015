@@ -11,7 +11,7 @@ Options:
     --reg=<REG>         [default: 3e-3]
     --mem_dim=<DIM>         [default: 100]
     --truncate_grad=<STEPS>     [default: 50]
-    --dropout=<RATE>        [default: 0.50]
+    --dropout=<RATE>        [default: 0.70]
     --model=<MODEL>         [default: classification]
     --lr=<LR>               [default: 0.1]
 """
@@ -19,6 +19,7 @@ import cPickle as pkl
 import numpy as np
 import os
 import sys
+sys.setrecursionlimit(50000)
 mydir = os.path.dirname(__file__)
 sys.path.append(os.path.join(mydir, 'data'))
 from data.dataset import AnnotatedData
@@ -39,6 +40,8 @@ if __name__ == '__main__':
     from pprint import pprint
     args = docopt(__doc__)
     pprint(args)
+
+    sys.exit(0)
 
     name = '_'.join([str(args[k]).strip('/').replace('/', '_') for k in sorted(args.keys())])
     todir = os.path.join(mydir, name)
@@ -158,6 +161,8 @@ if __name__ == '__main__':
         json.dump(d, f)
     with open('test.pkl', 'wb') as f:
         pkl.dump({'pred': preds, 'targ': targs}, f, pkl.HIGHEST_PROTOCOL)
-    print 'test loss', test_loss
-    print 'test_acc', test_acc
+    pprint(d)
+
+    with open('model.pkl', 'wb') as f:
+        pkl.dump(model, f, protocol=pkl.HIGHEST_PROTOCOL)
 
