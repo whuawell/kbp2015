@@ -11,23 +11,21 @@ import numpy as np
 if __name__ == '__main__':
 
     mydir = os.path.dirname(__file__)
-    fname = os.path.join(mydir, 'annotated_sentences.csv')
+    fname = os.path.join(mydir, 'supervision.csv')
 
     dataset = Dataset(splits={'train': Split(), 'dev': Split(), 'test': Split()})
     probs = {'train':0.7, 'dev':0.2, 'test':0.1}
     seen = set()
+    headers = ['dependency', 'words', 'lemma', 'pos', 'ner', 'subject_begin',
+               'subject_end', 'subject_head', 'subject_ner', 'object_begin', 'object_end', 'object_head', 'object_ner', 'relation']
 
     with open(fname, 'rb') as f:
         reader = csv.reader(f)
-        headers = reader.next()
         print headers
-        print dataset.splits['train'] == dataset.splits['dev']
         for i, row in enumerate(reader):
             row = {h:e for h,e in zip(headers,row)}
-            if row['entityCharOffsetBegin'] == 'entityCharOffsetBegin':
-                continue # this dataset has bugs, some rows are garbage
             ex = Example(**row)
-            key = ex.sentence, ex.relation
+            key = ex.words, ex.relation
             if key in seen:
                 continue
             seen.add(key)

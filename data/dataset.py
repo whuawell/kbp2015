@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 """dataset.py
-Usage: dataset.py [--context=<SIZE>] [--pretrained=<NAME>] [--unk=<UNK>] [--overwrite]
+Usage: dataset.py [--pretrained=<NAME>] [--unk=<UNK>] [--overwrite]
 
 Options:
-    --context=<SIZE>        -1 means entire sentence, n means n words around the entities    [default: -1]
-    --pretrained=<NAME>     glove or senna      [default: glove]
-    --unk=<UNK>             the token used for unknown, for senna, set this to 'UNKNOWN'    [default: ]
+    --pretrained=<NAME>     glove or senna      [default: senna]
+    --unk=<UNK>             the token used for unknown, for senna, set this to 'UNKNOWN'    [default: UNKNOWN]
 """
 import numpy as np
 import cPickle as pkl
@@ -14,6 +13,8 @@ import json
 from text.dataset import *
 from text.vocab import Vocab
 from pretrained.load import load_pretrained
+from dependency import get_path_from_parse, parse_words, NoPathException
+import string
 
 mydir = os.path.dirname(__file__)
 
@@ -22,40 +23,31 @@ def one_hot(y, num_classes):
     Y[np.arange(len(y)), y] = 1.
     return Y
 
-def get_first_n_words(sent, n):
-    if n == 0:
-        return []
-    words = sent.split()
-    end = min(len(words), n)
-    return words[:n]
-
-def get_last_n_words(sent, n):
-    if n == 0:
-        return []
-    words = sent.split()
-    start = min(n, len(sent))
-    return words[-start:]
-
 class ExampleAdaptor(object):
 
-    def __init__(self, word_vocab, rel_vocab):
-        self.word_vocab, self.rel_vocab = word_vocab, rel_vocab
+    punctuation = set(string.punctuation)
+    NUM = '1'
+    PUNC = '.'
 
-    def convert(self, example, context=0, unk='UNKNOWN'):
-        sent = example.sentence.lower()
-        if context == -1:
-            words = sent.split()
-        else:
-            start = min(int(example.entityCharOffsetEnd), int(example.slotValueCharOffsetEnd))
-            end = max(int(example.entityCharOffsetBegin), int(example.slotValueCharOffsetBegin))
-            words = get_last_n_words(sent[:start], context) + sent[start:end].split() + get_first_n_words(sent[end:], context)
-        if unk:
-            get_idx = lambda w: self.word_vocab.word2index.get(w, self.word_vocab[unk])
-        else:
-            get_idx = lambda w: self.word_vocab[w]
-        nums = [get_idx(w) for w in words]
-        rel = self.rel_vocab.add(example.relation)
-        return Example(sentence=nums, relation=rel)
+    def __init__(self, vocab):
+        self.vocab = vocab
+
+    def convert(self, example, unk='UNKNOWN'):
+        index2word = parse_words(example.words)
+        dependency_path = get_path_from_parse(example.dependency,
+                                              int(example.subject_begin), int(example.subject_end),
+                                              int(example.object_begin), int(example.object_end))
+        words = []
+        parse = []
+        for from_, to_, edge_ in dependency_path:
+            from_, to_ = [index2word[i] for i in [from_, to_]]
+            from_word, to_word = [self.vocab['word'].word2index.get(w, self.vocab['word'][unk]) for w in [from_, to_]]
+            edge = self.vocab['dep'].add(edge_)
+            words.append(to_word)
+            parse.append(edge)
+        rel = self.vocab['rel'].add(example.relation)
+        subject_ner, object_ner = [self.vocab['ner'].add(k) for k in [example.subject_ner, example.object_ner]]
+        return Example(words=words, parse=parse, subject_ner=subject_ner, object_ner=object_ner, relation=rel)
 
 
 class SplitAdaptor(object):
@@ -63,13 +55,17 @@ class SplitAdaptor(object):
     def __init__(self, example_adaptor):
         self.example_adaptor = example_adaptor
 
-    def convert(self, split, context=0, unk='UNKNOWN'):
+    def convert(self, split, unk='UNKNOWN'):
         my_split = Split()
         lengths = {}
-        idx = 0
-        for ex in split.examples:
-            ex = self.example_adaptor.convert(ex, context=context, unk=unk)
-            l = len(ex.sentence)
+        idx = no_path = 0
+        for i, ex in enumerate(split.examples):
+            try:
+                ex = self.example_adaptor.convert(ex, unk=unk)
+            except NoPathException as e:
+                no_path += 1
+                continue
+            l = len(ex.words)
             if l == 0:
                 continue
             my_split.add(ex)
@@ -77,25 +73,32 @@ class SplitAdaptor(object):
                 lengths[l] = []
             lengths[l].append(idx)
             idx += 1
+            if i % 1000 == 0:
+                print 'converted', i, 'out of', len(split.examples)
         my_split.lengths = lengths
+        print 'found', no_path, 'no path exceptions'
         return my_split
 
 
 class AnnotatedData(object):
 
-    def __init__(self, splits, word_vocab, rel_vocab, word2emb):
-        self.word_vocab, self.rel_vocab, self.word2emb = word_vocab, rel_vocab, word2emb
+    def __init__(self, splits, vocab, word2emb):
+        self.vocab = vocab
         self.splits = splits
+        self.word2emb = word2emb
 
     @classmethod
-    def build(cls, pretrained='senna', context=0, unk='UNKNOWN'):
+    def build(cls, pretrained='senna', unk='UNKNOWN'):
         word_vocab, word2emb = load_pretrained(pretrained)
-        rel_vocab = Vocab(unk=False)
+        vocab = {'word':word_vocab,
+                 'rel': Vocab(unk=False),
+                 'ner': Vocab(unk=False),
+                 'dep': Vocab(unk=False)}
         raw = Dataset.load(os.path.join(mydir, 'annotated'))
-        example_adaptor = ExampleAdaptor(word_vocab, rel_vocab)
+        example_adaptor = ExampleAdaptor(vocab)
         split_adaptor = SplitAdaptor(example_adaptor)
-        splits = {name:split_adaptor.convert(split, context=context, unk=unk) for name, split in raw.splits.items()}
-        return AnnotatedData(splits, word_vocab, rel_vocab, word2emb)
+        splits = {name:split_adaptor.convert(split, unk=unk) for name, split in raw.splits.items()}
+        return AnnotatedData(splits, vocab, word2emb)
 
     def save(self, to_dir):
         if not os.path.isdir(to_dir):
@@ -103,7 +106,7 @@ class AnnotatedData(object):
         with open(os.path.join(to_dir, 'config.json'), 'wb') as f:
             json.dump({'splits': self.splits.keys()}, f)
         with open(os.path.join(to_dir, 'vocabs.pkl'), 'wb') as f:
-            pkl.dump({'word': self.word_vocab, 'rel': self.rel_vocab}, f, protocol=pkl.HIGHEST_PROTOCOL)
+            pkl.dump(self.vocab, f, protocol=pkl.HIGHEST_PROTOCOL)
         with open(os.path.join(to_dir, 'word2emb.pkl'), 'wb') as f:
             pkl.dump(self.word2emb, f, protocol=pkl.HIGHEST_PROTOCOL)
         for name, split in self.splits.items():
@@ -118,34 +121,35 @@ class AnnotatedData(object):
         splits = {name:Split.load(os.path.join(from_dir, name)) for name in config['splits']}
         with open(os.path.join(from_dir, 'word2emb.pkl')) as f:
             word2emb = pkl.load(f)
-        return AnnotatedData(splits, vocabs['word'], vocabs['rel'], word2emb)
+        return AnnotatedData(splits, vocabs, word2emb)
 
     def generate_batches(self, name, batch_size=128, label='classification', to_one_hot=True):
-        assert label in ['classification', 'filter', 'raw']
+        assert label in ['classification', 'filter']
         split = self.splits[name]
         order = split.lengths.keys()
         random.shuffle(order)
 
         for l in order:
-            x, y = [], []
+            x_words, x_parse, x_ner, y = [], [], [], []
             for idx in split.lengths[l]:
                 ex = split.examples[idx]
-                x.append(ex.sentence)
+                x_words.append(ex.words)
+                x_parse.append(ex.parse)
+                x_ner.append([ex.subject_ner, ex.object_ner])
                 y.append(ex.relation)
-            X = np.array(x)
-            a, b = X.shape
+            X = [np.array(x_words), np.array(x_parse), np.array(x_ner)]
             Y = np.array(y)
-            related = Y != self.rel_vocab['no_relation']
+            related = Y != self.vocab['rel']['no_relation']
             if label == 'classification':
-                X = X[related]
+                X = [x[related] for x in X]
                 Y = Y[related]
                 if to_one_hot:
-                    Y = one_hot(Y, len(self.rel_vocab))
-            elif label == 'filter':
+                    Y = one_hot(Y, len(self.vocab['rel']))
+            else:
                 Y.fill(0.)
                 Y[related] = 1.
                 Y.reshape((-1, 1))
-            if len(X):
+            if len(Y):
                 # this can turn out to be false if non of the examples pass the filter
                 yield X, Y
 
@@ -156,24 +160,31 @@ if __name__ == '__main__':
     args = docopt(__doc__)
     pprint(args)
     max_printed = 20
-    context = int(args['--context'])
     pretrained = args['--pretrained']
     unk = args['--unk']
 
-    save = pretrained + str(context)
+    save = pretrained
     if os.path.isdir(save) and not args['--overwrite']:
         d = AnnotatedData.load(save)
     else:
-        d = AnnotatedData.build(context=context, unk=unk, pretrained=pretrained)
+        d = AnnotatedData.build(unk=unk, pretrained=pretrained)
         d.save(save)
     n_printed = total = 0
     for X, Y in d.generate_batches('train', to_one_hot=False):
-        print X.shape, Y.shape
+        Xwords, Xparse, Xner = X
+        print Xwords.shape, Xparse.shape, Xner.shape, Y.shape
         total += len(X)
-        for x, y in zip(X, Y):
-            words = [d.word_vocab.index2word[i] for i in x]
-            rel = d.rel_vocab.index2word[y]
+        args = [x for x in X] + [Y]
+        for xwords, xparse, xner, y in zip(*args):
+            words = [d.vocab['word'].index2word[i] for i in xwords]
+            parse = [d.vocab['dep'].index2word[i] for i in xparse]
+            ner = [d.vocab['ner'].index2word[i] for i in xner]
+            rel = d.vocab['rel'].index2word[y]
             if n_printed < max_printed:
-                print words, rel
+                print words
+                print parse
+                print ner
+                print rel
+                print
                 n_printed += 1
     print 'done', total, 'in total'
