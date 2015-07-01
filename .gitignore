@@ -64,3 +64,4 @@ target/
 __MACOSX/
 LICENSE
 *.npy
+*.csv

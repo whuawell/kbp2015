@@ -15,7 +15,7 @@ def load_pretrained(pretrained, cache=True):
     words = open(os.path.join(mydir, pretrained, 'words.lst')).read().split("\n")
     vocab = Vocab(unk=True)
     for word in words:
-        vocab.add(word)
+        vocab.add(unicode(word))
 
     # senna has 'UNKNOWN' and 'PADDING'
     ret = vocab, dict(zip(words, emb))
