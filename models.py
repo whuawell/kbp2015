@@ -22,9 +22,9 @@ def load_pretrained(word2emb, vocab, W):
 
 def ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
     net = Sequential()
-    net.add(Embedding(len(vocab['ner']), emb_dim, W_constraint=unitnorm))
+    net.add(Embedding(len(vocab['ner']), emb_dim))
     net.add(Flatten())
-    net.add(Dense(emb_dim * 2, hidden[-1], W_regularizer=l2(reg)))
+    net.add(Dense(emb_dim * 2, hidden[-1]))
     net.add(Activation(activation))
     return net, hidden[-1]
 
@@ -71,6 +71,31 @@ def sent_ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='t
     net = Sequential()
     net.add(Merge([sent_net, ner_net], mode='concat'))
     return net, ner_nout + sent_nout
+
+def sent_parse(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
+    word_emb = Embedding(len(vocab['word']), emb_dim)
+    W = word_emb.get_weights()[0]
+    W = load_pretrained(word2emb, vocab, W)
+    word_emb.set_weights([W])
+    word_emb.constraints = word_emb.params = word_emb.regularizers = []
+    word_net = Sequential()
+    word_net.add(word_emb)
+    dep_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=unitnorm)
+    dep_net = Sequential()
+    dep_net.add(dep_emb)
+    net = Sequential()
+    net.add(Merge([word_net, dep_net], mode='concat'))
+    n_in = emb_dim * 2
+    for n_out in hidden[:-1]:
+        net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
+        if dropout:
+            net.add(Dropout(dropout))
+        net.add(Activation(activation))
+        n_in = n_out
+    n_out = hidden[-1]
+    net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
+
+    return net, n_out
 
 def sent_parse_ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
     sent_net, sent_nout = sent(vocab, word2emb, emb_dim, hidden, dropout, activation, truncate_gradient, reg)

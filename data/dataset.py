@@ -14,6 +14,7 @@ from text.dataset import *
 from text.vocab import Vocab
 from pretrained.load import load_pretrained
 from dependency import get_path_from_parse, parse_words, NoPathException
+import csv
 import string
 
 mydir = os.path.dirname(__file__)
@@ -22,6 +23,35 @@ def one_hot(y, num_classes):
     Y = np.zeros((len(y), num_classes), dtype='float32')
     Y[np.arange(len(y)), y] = 1.
     return Y
+
+class TypeCheckAdaptor(object):
+
+    def __init__(self, vocab):
+        from theano import shared
+        self.vocab = vocab
+        self.valid_types = self.load_valid()
+        self.valid = shared(self.valid_types)
+
+    def get_valid(self, ner1, ner2):
+        return self.valid[ner1, ner2]
+
+    def get_valid_cpu(self, ner1, ner2):
+        return self.valid_types[ner1, ner2]
+
+    def load_valid(self):
+        fname = os.path.join(mydir, 'typecheck.csv')
+        valid_types = np.zeros((len(self.vocab['ner']), len(self.vocab['ner']), len(self.vocab['rel'])), dtype='float32')
+
+        with open(fname) as f:
+            reader = csv.reader(f)
+            for row in reader:
+                relation, subject_ner, object_ner = [e.strip() for e in row]
+                if relation not in self.vocab['rel'] or subject_ner not in self.vocab['ner'] or object_ner not in self.vocab['ner']:
+                    if subject_ner != 'MISC' and object_ner != 'MISC':
+                        continue
+                valid_types[self.vocab['ner'][subject_ner], self.vocab['ner'][object_ner], self.vocab['rel'][relation]] = 1
+        return valid_types
+
 
 class ExampleAdaptor(object):
 
@@ -34,6 +64,7 @@ class ExampleAdaptor(object):
 
     def convert(self, example, unk='UNKNOWN'):
         index2word = parse_words(example.words)
+        index2word = [w.lower() for w in index2word]
         dependency_path = get_path_from_parse(example.dependency,
                                               int(example.subject_begin), int(example.subject_end),
                                               int(example.object_begin), int(example.object_end))
@@ -124,7 +155,7 @@ class AnnotatedData(object):
         return AnnotatedData(splits, vocabs, word2emb)
 
     def generate_batches(self, name, batch_size=128, label='classification', to_one_hot=True):
-        assert label in ['classification', 'filter']
+        assert label in ['classification', 'filter', 'raw']
         split = self.splits[name]
         order = split.lengths.keys()
         random.shuffle(order)
@@ -145,14 +176,13 @@ class AnnotatedData(object):
                 Y = Y[related]
                 if to_one_hot:
                     Y = one_hot(Y, len(self.vocab['rel']))
-            else:
+            elif label == 'filter':
                 Y.fill(0.)
                 Y[related] = 1.
-                Y.reshape((-1, 1))
+                Y = Y.reshape((-1, 1))
             if len(Y):
                 # this can turn out to be false if non of the examples pass the filter
                 yield X, Y
-
 
 if __name__ == '__main__':
     from docopt import docopt
@@ -169,6 +199,17 @@ if __name__ == '__main__':
     else:
         d = AnnotatedData.build(unk=unk, pretrained=pretrained)
         d.save(save)
+
+    typechecker = TypeCheckAdaptor(d.vocab)
+    valid_types = typechecker.load_valid()
+    print 'loaded', valid_types.sum(), 'valid types'
+
+    num_neg = num_pos = 0
+    for X, Y in d.generate_batches('train', label='filter'):
+        num_pos += Y.sum()
+        num_neg += len(Y) - Y.sum()
+    print 'num_pos', num_pos, 'num_neg', num_neg
+
     n_printed = total = 0
     for X, Y in d.generate_batches('train', to_one_hot=False):
         Xwords, Xparse, Xner = X

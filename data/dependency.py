@@ -11,7 +11,7 @@ from pattern.graph import Graph, Node, Edge
 import json
 
 def parse_words(words):
-    parsed = words[1:-1].lower().split('","')
+    parsed = words[2:-2].split('","')
     return parsed
 
 def make_graph(parse):
@@ -81,7 +81,7 @@ if __name__ == '__main__':
     from text.dataset import Example
     ex = Example(d)
     words = parse_words(ex.words)
-    print words[int(d[u'subject_begin'])], words[int(d[u'object_begin'])]
+    print ' '.join(words[int(d[u'subject_begin']):int(d[u'subject_end'])]), ' '.join(words[int(d[u'object_begin']):int(d[u'object_end'])])
     print ' '.join(words)
 
     for line in ex.dependency.split("\n"):
