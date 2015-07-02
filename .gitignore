@@ -65,3 +65,5 @@ __MACOSX/
 LICENSE
 *.npy
 *.csv
+tuning/
+.ipynb_checkpoints/
