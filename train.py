@@ -10,7 +10,7 @@ Options:
     --activation=<ACT>  [default: relu]
     --hidden=<HID>      [default: 100,100]
     --truncate_grad=<STEPS>     [default: 25]
-    --dropout=<RATE>        [default: 0]
+    --dropout=<RATE>        [default: 0.5]
     --mode=<MODE>         [default: classification]
     --lr=<LR>               [default: 0.001]
     --reg=<REG>             [default: 0]
