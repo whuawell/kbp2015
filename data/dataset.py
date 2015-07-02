@@ -50,6 +50,10 @@ class TypeCheckAdaptor(object):
                     if subject_ner != 'MISC' and object_ner != 'MISC':
                         continue
                 valid_types[self.vocab['ner'][subject_ner], self.vocab['ner'][object_ner], self.vocab['rel'][relation]] = 1
+        # any ner type can express no_relation
+        for ner1 in xrange(len(self.vocab['ner'])):
+            for ner2 in xrange(len(self.vocab['ner'])):
+                valid_types[ner1, ner2, self.vocab['rel']['no_relation']] = 1
         return valid_types
 
 
@@ -170,13 +174,11 @@ class AnnotatedData(object):
                 y.append(ex.relation)
             X = [np.array(x_words), np.array(x_parse), np.array(x_ner)]
             Y = np.array(y)
-            related = Y != self.vocab['rel']['no_relation']
             if label == 'classification':
-                X = [x[related] for x in X]
-                Y = Y[related]
                 if to_one_hot:
                     Y = one_hot(Y, len(self.vocab['rel']))
             elif label == 'filter':
+                related = Y != self.vocab['rel']['no_relation']
                 Y.fill(0.)
                 Y[related] = 1.
                 Y = Y.reshape((-1, 1))
