@@ -6,13 +6,13 @@ Usage: train.py <data> [--model=<MODEL>] [--optim=<OPTIM>] [--epoch=<EPOCH>] [--
 Options:
     --model=<MODEL>     [default: sent]
     --optim=<OPTIM>     [default: rmsprop]
-    --epoch=<EPOCH>     [default: 50]
+    --epoch=<EPOCH>     [default: 300]
     --activation=<ACT>  [default: relu]
     --hidden=<HID>      [default: 100,100]
     --truncate_grad=<STEPS>     [default: 25]
     --dropout=<RATE>        [default: 0.5]
     --mode=<MODE>         [default: classification]
-    --lr=<LR>               [default: 0.001]
+    --lr=<LR>               [default: 0.01]
     --reg=<REG>             [default: 0]
 """
 import cPickle as pkl
@@ -117,7 +117,7 @@ if __name__ == '__main__':
     best_loss = np.inf
 
     def get_XY(X, Y):
-        Xwords, Xparse, Xner = X
+        Xwords, Xparse, Xner, Xtypes = X
         Xin = {
             'sent': Xwords,
             'ner': Xner,
@@ -126,24 +126,24 @@ if __name__ == '__main__':
             'sent_parse': [Xwords, Xparse],
             'sent_parse_ner': [Xwords, Xparse, Xner]
         }[args['--model']]
-        Yin = np.concatenate([Y, Xner], axis=1) if args['--mode'] == 'classification' else Y
-        return Xin, Yin, Xner
+        Yin = np.concatenate([Y, Xtypes], axis=1) if args['--mode'] == 'classification' else Y
+        return Xin, Yin, Xtypes
 
     def run_epoch(split, train=False):
         total = total_loss = 0
         func = model.train if train else model.test
         preds, targs = [], []
         for X, Y in dataset.generate_batches(split, label=args['--mode']):
-            Xin, Yin, Xner = get_XY(X, Y)
+            Xin, Yin, Xtypes = get_XY(X, Y)
             loss = func(Xin, Yin)
             if args['--mode'] == 'classification':
                 pred = model.predict(Xin, verbose=0)
-                pred *= typechecker.get_valid_cpu(Xner[:, 0], Xner[:, 1])
+                pred *= typechecker.get_valid_cpu(Xtypes[:, 0], Xtypes[:, 1])
                 pred = pred.argmax(axis=1)
                 targs.append(Y.argmax(axis=1))
             else:
                 pred = model.predict(Xin, verbose=0).flatten() > 0.5
-                valid = typechecker.get_valid_cpu(Xner[:, 0], Xner[:, 1]).sum(axis=1) > 0
+                valid = typechecker.get_valid_cpu(Xtypes[:, 0], Xtypes[:, 1]).sum(axis=1) > 0
                 pred = pred * valid
                 targs.append(Y.flatten())
             preds.append(pred)
@@ -157,7 +157,6 @@ if __name__ == '__main__':
 
     log = open('train.log', 'wb')
     for epoch in xrange(int(args['--epoch'])+1):
-
         train_f1, train_loss, preds, targs = run_epoch('train', train=True)
         dev_f1, dev_loss, preds, targs = run_epoch('dev', train=False)
 
