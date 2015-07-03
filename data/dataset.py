@@ -69,20 +69,39 @@ class ExampleAdaptor(object):
     def convert(self, example, unk='UNKNOWN'):
         index2word = parse_words(example.words)
         index2word = [w.lower() for w in index2word]
+        index2ner = parse_words(example.ner)
         dependency_path = get_path_from_parse(example.dependency,
                                               int(example.subject_begin), int(example.subject_end),
                                               int(example.object_begin), int(example.object_end))
+
+        seen_start = False
+        START = '***START***'
         words = []
         parse = []
+        ner = []
+        start_index = self.vocab['dep'].add(START)
+
         for from_, to_, edge_ in dependency_path:
-            from_, to_ = [index2word[i] for i in [from_, to_]]
-            from_word, to_word = [self.vocab['word'].word2index.get(w, self.vocab['word'][unk]) for w in [from_, to_]]
+            from_word, to_word = [index2word[i] for i in [from_, to_]]
+            from_word_index, to_word_index = [self.vocab['word'].word2index.get(w, self.vocab['word'][unk]) for w in [from_word, to_word]]
+            from_ner, to_ner = [index2ner[i] for i in [from_, to_]]
+            from_ner_index, to_ner_index = [self.vocab['ner'].add(w) for w in [from_ner, to_ner]]
             edge = self.vocab['dep'].add(edge_)
-            words.append(to_word)
+
+            if not seen_start:
+                words.append(from_word_index)
+                ner.append(from_ner_index)
+                parse.append(start_index)
+                seen_start = True
+
+            words.append(to_word_index)
+            ner.append(to_ner_index)
             parse.append(edge)
         rel = self.vocab['rel'].add(example.relation)
         subject_ner, object_ner = [self.vocab['ner'].add(k) for k in [example.subject_ner, example.object_ner]]
-        return Example(words=words, parse=parse, subject_ner=subject_ner, object_ner=object_ner, relation=rel)
+        return Example(words=words, parse=parse, ner=ner, subject_ner=subject_ner, object_ner=object_ner, relation=rel,
+                       subject=' '.join(index2word[int(example.subject_begin):int(example.subject_end)]),
+                       object=' '.join(index2word[int(example.object_begin):int(example.object_end)]))
 
 
 class SplitAdaptor(object):
@@ -165,14 +184,15 @@ class AnnotatedData(object):
         random.shuffle(order)
 
         for l in order:
-            x_words, x_parse, x_ner, y = [], [], [], []
+            x_words, x_parse, x_ner, x_types, y = [], [], [], [], []
             for idx in split.lengths[l]:
                 ex = split.examples[idx]
                 x_words.append(ex.words)
                 x_parse.append(ex.parse)
-                x_ner.append([ex.subject_ner, ex.object_ner])
+                x_ner.append(ex.ner)
+                x_types.append([ex.subject_ner, ex.object_ner])
                 y.append(ex.relation)
-            X = [np.array(x_words), np.array(x_parse), np.array(x_ner)]
+            X = [np.array(x_words), np.array(x_parse), np.array(x_ner), np.array(x_types)]
             Y = np.array(y)
             if label == 'classification':
                 if to_one_hot:
@@ -214,19 +234,21 @@ if __name__ == '__main__':
 
     n_printed = total = 0
     for X, Y in d.generate_batches('train', to_one_hot=False):
-        Xwords, Xparse, Xner = X
-        print Xwords.shape, Xparse.shape, Xner.shape, Y.shape
+        Xwords, Xparse, Xner, Xtypes = X
+        print Xwords.shape, Xparse.shape, Xner.shape, Xtypes.shape, Y.shape
         total += len(X)
         args = [x for x in X] + [Y]
-        for xwords, xparse, xner, y in zip(*args):
+        for xwords, xparse, xner, xtypes, y in zip(*args):
             words = [d.vocab['word'].index2word[i] for i in xwords]
             parse = [d.vocab['dep'].index2word[i] for i in xparse]
             ner = [d.vocab['ner'].index2word[i] for i in xner]
+            types = [d.vocab['ner'].index2word[i] for i in xtypes]
             rel = d.vocab['rel'].index2word[y]
             if n_printed < max_printed:
                 print words
                 print parse
                 print ner
+                print types
                 print rel
                 print
                 n_printed += 1
