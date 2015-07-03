@@ -80,7 +80,7 @@ def sent_parse(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation=
     word_emb.constraints = word_emb.params = word_emb.regularizers = []
     word_net = Sequential()
     word_net.add(word_emb)
-    dep_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=unitnorm)
+    dep_emb = Embedding(len(vocab['dep']), emb_dim)
     dep_net = Sequential()
     dep_net.add(dep_emb)
     net = Sequential()
@@ -98,11 +98,35 @@ def sent_parse(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation=
     return net, n_out
 
 def sent_parse_ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
-    sent_net, sent_nout = sent(vocab, word2emb, emb_dim, hidden, dropout, activation, truncate_gradient, reg)
-    ner_net, ner_nout = ner(vocab, word2emb, emb_dim, hidden, dropout, activation, truncate_gradient, reg)
-    parse_net, parse_nout = parse(vocab, word2emb, emb_dim, hidden, dropout, activation, truncate_gradient, reg)
+    word_emb = Embedding(len(vocab['word']), emb_dim)
+    W = word_emb.get_weights()[0]
+    W = load_pretrained(word2emb, vocab, W)
+    word_emb.set_weights([W])
+    word_emb.constraints = word_emb.params = word_emb.regularizers = []
+    word_net = Sequential()
+    word_net.add(word_emb)
+    dep_emb = Embedding(len(vocab['dep']), emb_dim)
+    dep_net = Sequential()
+    dep_net.add(dep_emb)
+    sent_parse_net = Sequential()
+    sent_parse_net.add(Merge([word_net, dep_net], mode='concat'))
+    n_in = emb_dim * 2
+    for n_out in hidden[:-1]:
+        sent_parse_net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
+        if dropout:
+            sent_parse_net.add(Dropout(dropout))
+        sent_parse_net.add(Activation(activation))
+        n_in = n_out
+    n_out = hidden[-1]
+    sent_parse_net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
+
+    ner_net = Sequential()
+    ner_net.add(Embedding(len(vocab['ner']), emb_dim))
+    ner_net.add(Flatten())
 
     net = Sequential()
-    net.add(Merge([sent_net, parse_net, ner_net], mode='concat'))
-    return net, ner_nout + sent_nout + parse_nout
+    net.add(Merge([sent_parse_net, ner_net], mode='concat'))
+    n_out += emb_dim * 2
+
+    return net, n_out
 
