@@ -22,7 +22,7 @@ def load_pretrained(word2emb, vocab, W):
 
 def ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
     net = Sequential()
-    edge_emb = Embedding(len(vocab['ner']), emb_dim, W_constraint=unitnorm)
+    edge_emb = Embedding(len(vocab['ner']), emb_dim, W_constraint=UnitNorm())
     net.add(edge_emb)
     n_in = emb_dim
     for n_out in hidden[:-1]:
@@ -38,7 +38,7 @@ def ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh',
 
 def parse(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
     net = Sequential()
-    edge_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=unitnorm)
+    edge_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=UnitNorm())
     net.add(edge_emb)
     n_in = emb_dim
     for n_out in hidden[:-1]:
@@ -80,7 +80,7 @@ def sent_ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='t
     word_emb.constraints = word_emb.params = word_emb.regularizers = []
     word_net = Sequential()
     word_net.add(word_emb)
-    ner_emb = Embedding(len(vocab['ner']), emb_dim)
+    ner_emb = Embedding(len(vocab['ner']), emb_dim, W_constraint=UnitNorm())
     ner_net = Sequential()
     ner_net.add(ner_emb)
     net = Sequential()
@@ -105,7 +105,7 @@ def sent_parse(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation=
     word_emb.constraints = word_emb.params = word_emb.regularizers = []
     word_net = Sequential()
     word_net.add(word_emb)
-    dep_emb = Embedding(len(vocab['dep']), emb_dim)
+    dep_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=UnitNorm())
     dep_net = Sequential()
     dep_net.add(dep_emb)
     net = Sequential()
@@ -130,10 +130,10 @@ def sent_parse_ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activat
     word_emb.constraints = word_emb.params = word_emb.regularizers = []
     word_net = Sequential()
     word_net.add(word_emb)
-    dep_emb = Embedding(len(vocab['dep']), emb_dim)
+    dep_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=UnitNorm())
     dep_net = Sequential()
     dep_net.add(dep_emb)
-    ner_emb = Embedding(len(vocab['ner']), emb_dim)
+    ner_emb = Embedding(len(vocab['ner']), emb_dim, W_constraint=UnitNorm())
     ner_net = Sequential()
     ner_net.add(ner_emb)
     net = Sequential()

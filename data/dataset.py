@@ -16,6 +16,7 @@ from pretrained.load import load_pretrained
 from dependency import get_path_from_parse, parse_words, NoPathException
 import csv
 import string
+from pprint import pprint
 
 mydir = os.path.dirname(__file__)
 
@@ -54,6 +55,9 @@ class TypeCheckAdaptor(object):
         for ner1 in xrange(len(self.vocab['ner'])):
             for ner2 in xrange(len(self.vocab['ner'])):
                 valid_types[ner1, ner2, self.vocab['rel']['no_relation']] = 1
+        # allow misc types
+        valid_types[self.vocab['ner']['MISC'], :, :] = 1
+        valid_types[:, self.vocab['ner']['MISC'], :] = 1
         return valid_types
 
 
@@ -66,10 +70,10 @@ class ExampleAdaptor(object):
     def __init__(self, vocab):
         self.vocab = vocab
 
-    def convert(self, example, unk='UNKNOWN'):
-        index2word = parse_words(example.words)
+    def convert(self, example, unk='UNKNOWN', tokenize=parse_words):
+        index2word = tokenize(example.words)
         index2word = [w.lower() for w in index2word]
-        index2ner = parse_words(example.ner)
+        index2ner = tokenize(example.ner)
         dependency_path = get_path_from_parse(example.dependency,
                                               int(example.subject_begin), int(example.subject_end),
                                               int(example.object_begin), int(example.object_end))
@@ -97,11 +101,11 @@ class ExampleAdaptor(object):
             words.append(to_word_index)
             ner.append(to_ner_index)
             parse.append(edge)
-        rel = self.vocab['rel'].add(example.relation)
+        rel = self.vocab['rel'].add(example.relation) if 'relation' in example.keys() else None
         subject_ner, object_ner = [self.vocab['ner'].add(k) for k in [example.subject_ner, example.object_ner]]
         return Example(words=words, parse=parse, ner=ner, subject_ner=subject_ner, object_ner=object_ner, relation=rel,
                        subject=' '.join(index2word[int(example.subject_begin):int(example.subject_end)]),
-                       object=' '.join(index2word[int(example.object_begin):int(example.object_end)]))
+                       object=' '.join(index2word[int(example.object_begin):int(example.object_end)]), debug=index2word)
 
 
 class SplitAdaptor(object):
@@ -177,7 +181,7 @@ class AnnotatedData(object):
             word2emb = pkl.load(f)
         return AnnotatedData(splits, vocabs, word2emb)
 
-    def generate_batches(self, name, batch_size=128, label='classification', to_one_hot=True):
+    def generate_batches(self, name, batch_size=128, label='classification', to_one_hot=True, debug=False):
         assert label in ['classification', 'filter', 'raw']
         split = self.splits[name]
         order = split.lengths.keys()
@@ -185,6 +189,7 @@ class AnnotatedData(object):
 
         for l in order:
             x_words, x_parse, x_ner, x_types, y = [], [], [], [], []
+            x_debug = []
             for idx in split.lengths[l]:
                 ex = split.examples[idx]
                 x_words.append(ex.words)
@@ -192,6 +197,8 @@ class AnnotatedData(object):
                 x_ner.append(ex.ner)
                 x_types.append([ex.subject_ner, ex.object_ner])
                 y.append(ex.relation)
+                if debug:
+                    x_debug.append(ex.debug)
             X = [np.array(x_words), np.array(x_parse), np.array(x_ner), np.array(x_types)]
             Y = np.array(y)
             if label == 'classification':
@@ -204,7 +211,10 @@ class AnnotatedData(object):
                 Y = Y.reshape((-1, 1))
             if len(Y):
                 # this can turn out to be false if non of the examples pass the filter
-                yield X, Y
+                if debug:
+                    yield X, Y, x_debug
+                else:
+                    yield X, Y
 
 if __name__ == '__main__':
     from docopt import docopt
@@ -233,23 +243,23 @@ if __name__ == '__main__':
     print 'num_pos', num_pos, 'num_neg', num_neg
 
     n_printed = total = 0
-    for X, Y in d.generate_batches('train', to_one_hot=False):
+    for X, Y, Debug in d.generate_batches('train', to_one_hot=False, debug=True):
         Xwords, Xparse, Xner, Xtypes = X
         print Xwords.shape, Xparse.shape, Xner.shape, Xtypes.shape, Y.shape
         total += len(X)
-        args = [x for x in X] + [Y]
-        for xwords, xparse, xner, xtypes, y in zip(*args):
+        args = X + [Debug, Y]
+        for xwords, xparse, xner, xtypes, debug, y in zip(*args):
             words = [d.vocab['word'].index2word[i] for i in xwords]
             parse = [d.vocab['dep'].index2word[i] for i in xparse]
             ner = [d.vocab['ner'].index2word[i] for i in xner]
             types = [d.vocab['ner'].index2word[i] for i in xtypes]
             rel = d.vocab['rel'].index2word[y]
             if n_printed < max_printed:
+                print ' '.join(debug)
                 print words
                 print parse
                 print ner
                 print types
                 print rel
-                print
                 n_printed += 1
     print 'done', total, 'in total'

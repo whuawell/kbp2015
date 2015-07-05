@@ -6,7 +6,7 @@ Usage: train.py <data> [--model=<MODEL>] [--optim=<OPTIM>] [--epoch=<EPOCH>] [--
 Options:
     --model=<MODEL>     [default: sent]
     --optim=<OPTIM>     [default: rmsprop]
-    --epoch=<EPOCH>     [default: 300]
+    --epoch=<EPOCH>     [default: 500]
     --activation=<ACT>  [default: relu]
     --hidden=<HID>      [default: 100,100]
     --truncate_grad=<STEPS>     [default: 25]
@@ -31,11 +31,11 @@ from keras.optimizers import *
 from keras.regularizers import *
 from keras.objectives import *
 from theano import shared
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
 
 mydir = os.path.dirname(__file__)
 
-def get_model_from_arg(args, dataset):
+def get_model_from_arg(args, dataset, typechecker):
     word_emb_dim = len(dataset.word2emb.values()[0])
     hidden = [int(d) for d in args['--hidden'].split(',')]
     dropout, lr, reg = [float(args[d]) for d in ['--dropout', '--lr', '--reg']]
@@ -101,6 +101,7 @@ if __name__ == '__main__':
         os.makedirs(todir)
 
     dataset = AnnotatedData.load(args['<data>'])
+    f1_labels = [i for i in xrange(len(dataset.vocab['rel'])) if i != dataset.vocab['rel']['no_relation']]
 
     sizes = {name:len(split) for name, split in dataset.splits.items()}
     print json.dumps(sizes)
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     with open('args.json', 'wb') as f:
         json.dump(args, f)
 
-    model = get_model_from_arg(args, dataset)
+    model = get_model_from_arg(args, dataset, typechecker)
 
     best_f1, best_weights = 0, None
     best_loss = np.inf
@@ -151,7 +152,8 @@ if __name__ == '__main__':
             total += 1
         preds = np.concatenate(preds).astype('int32')
         targs = np.concatenate(targs).astype('int32')
-        total_f1 = f1_score(targs, preds, average='micro') if args['--mode'] == 'classification' else f1_score(targs, preds)
+        # exclude no_relation when calculating f1
+        total_f1 = f1_score(targs, preds, average='micro', labels=f1_labels) if args['--mode'] == 'classification' else f1_score(targs, preds)
         total_loss /= float(total)
         return total_f1, total_loss, preds, targs
 
@@ -171,21 +173,26 @@ if __name__ == '__main__':
         print d
         log.write(d + "\n")
 
-        if epoch % 10 == 0:
+        if epoch % 100 == 0:
             np.save('weights.' + str(epoch), model.get_weights())
     log.close()
 
     model.set_weights(best_weights)
     test_f1, test_loss, preds, targs = run_epoch('test', train=False)
 
-    from sklearn.metrics import f1_score
-
-    d = {'test_loss': test_loss, 'test_f1': test_f1, 'dev_f1': best_f1}
+    d = {
+        'test_loss': test_loss,
+        'test_f1': test_f1,
+        'dev_f1': best_f1,
+        'test_acc': accuracy_score(targs, preds),
+        }
     if args['--mode'] == 'classification':
-        d['test_f1_macro'] = f1_score(targs, preds, average='macro')
-        d['test_f1_micro'] = f1_score(targs, preds, average='micro')
+        d.update({
+            'test_recall': recall_score(targs, preds, average='micro', labels=f1_labels),
+            'test_precision': precision_score(targs, preds, average='micro', labels=f1_labels),
+        })
     else:
-        d['test_f1'] = f1_score(targs, preds)
+        d['test_f1'] = f1_score(targs, preds, labels=f1_labels)
     with open('test.json', 'wb') as f:
         json.dump(d, f)
     with open('test.pkl', 'wb') as f:
@@ -193,4 +200,4 @@ if __name__ == '__main__':
     pprint(d)
 
     with open('model.weights.pkl', 'wb') as f:
-        pkl.dump(model.get_weights(), f, protocol=pkl.HIGHEST_PROTOCOL)
+        pkl.dump(best_weights, f, protocol=pkl.HIGHEST_PROTOCOL)

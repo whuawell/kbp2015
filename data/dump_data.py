@@ -45,7 +45,6 @@ if __name__ == '__main__':
                     # print ' '.join(words[int(ex.object_begin):int(ex.object_end)]), ex.object_ner
                     # print ex.relation
                     num_bad += 1
-                    continue
 
             seen.add(key)
             dataset.add_random(ex, probs)
