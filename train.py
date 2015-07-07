@@ -138,9 +138,9 @@ if __name__ == '__main__':
             Xin, Yin, Xtypes = get_XY(X, Y)
             loss = func(Xin, Yin)
             if args['--mode'] == 'classification':
-                pred = model.predict(Xin, verbose=0)
-                pred *= typechecker.get_valid_cpu(Xtypes[:, 0], Xtypes[:, 1])
-                pred = pred.argmax(axis=1)
+                prob = model.predict(Xin, verbose=0)
+                prob *= typechecker.get_valid_cpu(Xtypes[:, 0], Xtypes[:, 1])
+                pred = prob.argmax(axis=1)
                 targs.append(Y.argmax(axis=1))
             else:
                 pred = model.predict(Xin, verbose=0).flatten() > 0.5
@@ -158,11 +158,12 @@ if __name__ == '__main__':
         return total_f1, total_loss, preds, targs
 
     log = open('train.log', 'wb')
-    for epoch in xrange(int(args['--epoch'])+1):
+    max_epoch = int(args['--epoch'])+1
+    for epoch in xrange(max_epoch):
         train_f1, train_loss, preds, targs = run_epoch('train', train=True)
         dev_f1, dev_loss, preds, targs = run_epoch('dev', train=False)
 
-        if epoch > 5 and dev_f1 > best_f1:
+        if (max_epoch < 5 or epoch > 5) and dev_f1 > best_f1:
             best_f1 = dev_f1
             best_weights = model.get_weights()
             with open('best_weights.pkl', 'wb') as f:

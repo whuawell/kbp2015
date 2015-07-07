@@ -38,7 +38,8 @@ class TypeCheckAdaptor(object):
         return self.valid[ner1, ner2]
 
     def get_valid_cpu(self, ner1, ner2):
-        return self.valid_types[ner1, ner2]
+        valid = self.valid_types[ner1, ner2]
+        return valid
 
     def load_valid(self):
         fname = os.path.join(mydir, 'typecheck.csv')
