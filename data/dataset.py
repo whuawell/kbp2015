@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 """dataset.py
-Usage: dataset.py [--pretrained=<NAME>] [--unk=<UNK>] [--overwrite]
+Usage: dataset.py [--pretrained=<NAME>] [--unk=<UNK>] [--overwrite] [--max_printed=<MAX>]
 
 Options:
     --pretrained=<NAME>     glove or senna      [default: senna]
     --unk=<UNK>             the token used for unknown, for senna, set this to 'UNKNOWN'    [default: UNKNOWN]
+    --max_printed=<MAX>       how many examples to print (use -1 to print all)  [default:10]
 """
 import numpy as np
 import cPickle as pkl
@@ -103,6 +104,7 @@ class ExampleAdaptor(object):
             parse.append(edge)
         rel = self.vocab['rel'].add(example.relation) if 'relation' in example.keys() else None
         subject_ner, object_ner = [self.vocab['ner'].add(k) for k in [example.subject_ner, example.object_ner]]
+
         return Example(words=words, parse=parse, ner=ner, subject_ner=subject_ner, object_ner=object_ner, relation=rel,
                        subject=' '.join(index2word[int(example.subject_begin):int(example.subject_end)]),
                        object=' '.join(index2word[int(example.object_begin):int(example.object_end)]), debug=index2word)
@@ -189,7 +191,7 @@ class AnnotatedData(object):
 
         for l in order:
             x_words, x_parse, x_ner, x_types, y = [], [], [], [], []
-            x_debug = []
+            debug_dump = []
             for idx in split.lengths[l]:
                 ex = split.examples[idx]
                 x_words.append(ex.words)
@@ -198,7 +200,7 @@ class AnnotatedData(object):
                 x_types.append([ex.subject_ner, ex.object_ner])
                 y.append(ex.relation)
                 if debug:
-                    x_debug.append(ex.debug)
+                    debug_dump.append([ex.debug, ex.subject, ex.object])
             X = [np.array(x_words), np.array(x_parse), np.array(x_ner), np.array(x_types)]
             Y = np.array(y)
             if label == 'classification':
@@ -212,7 +214,7 @@ class AnnotatedData(object):
             if len(Y):
                 # this can turn out to be false if non of the examples pass the filter
                 if debug:
-                    yield X, Y, x_debug
+                    yield X, Y, debug_dump
                 else:
                     yield X, Y
 
@@ -221,7 +223,9 @@ if __name__ == '__main__':
     from pprint import pprint
     args = docopt(__doc__)
     pprint(args)
-    max_printed = 20
+    max_printed = int(args['--max_printed'])
+    if max_printed < 0:
+        max_printed = np.inf
     pretrained = args['--pretrained']
     unk = args['--unk']
 
@@ -245,21 +249,38 @@ if __name__ == '__main__':
     n_printed = total = 0
     for X, Y, Debug in d.generate_batches('train', to_one_hot=False, debug=True):
         Xwords, Xparse, Xner, Xtypes = X
-        print Xwords.shape, Xparse.shape, Xner.shape, Xtypes.shape, Y.shape
         total += len(X)
         args = X + [Debug, Y]
         for xwords, xparse, xner, xtypes, debug, y in zip(*args):
+            debug_words, subj, obj = debug
             words = [d.vocab['word'].index2word[i] for i in xwords]
             parse = [d.vocab['dep'].index2word[i] for i in xparse]
             ner = [d.vocab['ner'].index2word[i] for i in xner]
             types = [d.vocab['ner'].index2word[i] for i in xtypes]
             rel = d.vocab['rel'].index2word[y]
-            if n_printed < max_printed:
-                print ' '.join(debug)
-                print words
-                print parse
-                print ner
-                print types
-                print rel
-                n_printed += 1
+            subj_ner, obj_ner = types
+            try:
+                if n_printed < max_printed:
+                    print '# sentence'
+                    print ' '.join(debug_words)
+                    print '# span'
+                    print ' '.join(words)
+                    print '# parse span'
+                    print ' '.join(parse)
+                    print '# ner span'
+                    print ' '.join(ner)
+                    print '# subject type'
+                    print subj_ner
+                    print '# object type'
+                    print obj_ner
+                    print '# relation'
+                    print rel
+                    print '# subject'
+                    print subj
+                    print '# object'
+                    print obj
+                    print
+                    n_printed += 1
+            except UnicodeEncodeError as e:
+                continue
     print 'done', total, 'in total'
