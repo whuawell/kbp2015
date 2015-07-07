@@ -5,7 +5,7 @@ Usage: dataset.py [--pretrained=<NAME>] [--unk=<UNK>] [--overwrite] [--max_print
 Options:
     --pretrained=<NAME>     glove or senna      [default: senna]
     --unk=<UNK>             the token used for unknown, for senna, set this to 'UNKNOWN'    [default: UNKNOWN]
-    --max_printed=<MAX>       how many examples to print (use -1 to print all)  [default:10]
+    --max_printed=<MAX>       how many examples to print (use -1 to print all)  [default: 10]
 """
 import numpy as np
 import cPickle as pkl
@@ -264,12 +264,9 @@ if __name__ == '__main__':
                 if n_printed < max_printed:
                     print '# sentence'
                     print ' '.join(debug_words)
-                    print '# span'
-                    print ' '.join(words)
-                    print '# parse span'
-                    print ' '.join(parse)
-                    print '# ner span'
-                    print ' '.join(ner)
+                    print '# span (word, parse, ner)'
+                    for word, parse, ner in zip(words, parse, ner):
+                        print word, parse, ner
                     print '# subject type'
                     print subj_ner
                     print '# object type'

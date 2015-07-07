@@ -4,11 +4,11 @@ Usage: train.py <data> [--model=<MODEL>] [--optim=<OPTIM>] [--epoch=<EPOCH>] [--
 
 
 Options:
-    --model=<MODEL>     [default: sent]
+    --model=<MODEL>     [default: sent_parse_ner]
     --optim=<OPTIM>     [default: rmsprop]
-    --epoch=<EPOCH>     [default: 500]
+    --epoch=<EPOCH>     [default: 300]
     --activation=<ACT>  [default: relu]
-    --hidden=<HID>      [default: 100,100]
+    --hidden=<HID>      [default: 300,300]
     --truncate_grad=<STEPS>     [default: 25]
     --dropout=<RATE>        [default: 0.5]
     --mode=<MODE>         [default: classification]
