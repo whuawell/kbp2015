@@ -8,6 +8,7 @@ from text.dataset import Dataset, Split, Example
 from dataset import parse_words
 import csv
 import numpy as np
+from collections import Counter
 
 if __name__ == '__main__':
 
@@ -55,5 +56,19 @@ if __name__ == '__main__':
                     print name, len(split.examples),
                 print
         print 'processed', i, 'num_bad', num_bad
+
+    def print_counts(split):
+        rels = [d.relation for d in dataset.splits[split].examples]
+        counter = Counter(rels)
+        names, counts = zip(*counter.most_common())
+        total = float(sum(counts))
+        counts = [c / total for c in counts]
+        from pprint import pprint
+        print 'in split', split
+        pprint(zip(names, counts))
+
+    print_counts('train')
+    print_counts('dev')
+    print_counts('test')
 
     dataset.save('annotated')
