@@ -17,7 +17,8 @@ from pretrained.load import load_pretrained
 from dependency import get_path_from_parse, parse_words, NoPathException
 import csv
 import string
-from pprint import pprint
+from pprint import pprint, pformat
+import sys
 
 mydir = os.path.dirname(__file__)
 
@@ -76,37 +77,82 @@ class ExampleAdaptor(object):
         index2word = tokenize(example.words)
         index2word = [w.lower() for w in index2word]
         index2ner = tokenize(example.ner)
-        dependency_path = get_path_from_parse(example.dependency,
-                                              int(example.subject_begin), int(example.subject_end),
-                                              int(example.object_begin), int(example.object_end))
+        subject_begin, subject_end, object_begin, object_end = [int(example[k]) for k in ['subject_begin', 'subject_end', 'object_begin', 'object_end']]
+        subj = ' '.join(index2word[subject_begin:subject_end])
+        obj = ' '.join(index2word[object_begin:object_end])
 
-        seen_start = False
-        START = '***START***'
+        try:
+            dependency_path = get_path_from_parse(example.dependency, subject_begin, subject_end, object_begin, object_end)
+            if not dependency_path:
+                raise NoPathException()
+        except NoPathException as e:
+            sys.stderr.write("cannot find parse span in example (json)\n")
+            sys.stderr.write(json.dumps(example) + "\n")
+            raise e
+
         words = []
         parse = []
-        ner = []
-        start_index = self.vocab['dep'].add(START)
+        ners = []
+        word_span_index = []
+        pad = '**PAD**'
+        pad_index = self.vocab['dep'].add(pad)
+
+        # backfill NER tags with manual overrides from Gabor
+        for i in xrange(subject_begin, subject_end):
+            index2ner[i] = example.subject_ner
+        for i in xrange(object_begin, object_end):
+            index2ner[i] = example.object_ner
+
+        first_from_, _, first_edge = dependency_path[0]
+        first_word = index2word[first_from_]
+        first_ner = index2ner[first_from_]
+
+        # manually fill the first step
+        words.append(self.vocab['word'].add(first_ner))
+        parse.append(self.vocab['dep'].add(first_edge))
+        ners.append(self.vocab['ner'].add(first_ner))
+
+        # get_word = lambda w: self.vocab['word'].word2index.get(w, self.vocab['word'][unk]) # use unks
+        get_word = lambda w: self.vocab['word'].add(w) # don't use unks
 
         for from_, to_, edge_ in dependency_path:
             from_word, to_word = [index2word[i] for i in [from_, to_]]
-            from_word_index, to_word_index = [self.vocab['word'].word2index.get(w, self.vocab['word'][unk]) for w in [from_word, to_word]]
+            from_word_index, to_word_index = [get_word(w) for w in [from_word, to_word]]
             from_ner, to_ner = [index2ner[i] for i in [from_, to_]]
             from_ner_index, to_ner_index = [self.vocab['ner'].add(w) for w in [from_ner, to_ner]]
             edge = self.vocab['dep'].add(edge_)
 
-            if not seen_start:
-                words.append(from_word_index)
-                ner.append(from_ner_index)
-                parse.append(start_index)
-                seen_start = True
-
+            word_span_index.append(to_)
             words.append(to_word_index)
-            ner.append(to_ner_index)
             parse.append(edge)
+            ners.append(to_ner_index)
+
+        last_to_ = to_
+        last_word = index2ner[last_to_]
+
+        def is_entity_token(i):
+            return (i >= subject_begin and i < subject_end) or (i >= object_begin and i < object_end)
+
+        # keep removing first word until 1 word is part of the entity
+        while len(word_span_index) > 1 and is_entity_token(word_span_index[1]):
+            word_span_index = word_span_index[1:]
+            words = words[1:]
+            parse = parse[1:]
+            ners = ners[1:]
+
+        # keep removing last word until 1 word is part of the entity
+        while len(word_span_index) > 1 and is_entity_token(word_span_index[-2]):
+            word_span_index = word_span_index[:-1]
+            words = words[:-1]
+            parse = parse[:-1]
+            ners = ners[:-1]
+
+        words[-1] = self.vocab['word'].add(last_word)
+
         rel = self.vocab['rel'].add(example.relation) if 'relation' in example.keys() else None
         subject_ner, object_ner = [self.vocab['ner'].add(k) for k in [example.subject_ner, example.object_ner]]
 
-        return Example(words=words, parse=parse, ner=ner, subject_ner=subject_ner, object_ner=object_ner, relation=rel,
+        return Example(words=words, parse=parse, ner=ners, subject_ner=subject_ner, object_ner=object_ner, relation=rel,
                        subject=' '.join(index2word[int(example.subject_begin):int(example.subject_end)]),
                        object=' '.join(index2word[int(example.object_begin):int(example.object_end)]), debug=index2word)
 
@@ -248,6 +294,7 @@ if __name__ == '__main__':
     print 'num_pos', num_pos, 'num_neg', num_neg
 
     n_printed = total = 0
+    out_file = open('aligned.txt', 'wb')
     for X, Y, Debug in d.generate_batches('train', to_one_hot=False, debug=True):
         Xwords, Xparse, Xner, Xtypes = X
         total += len(X)
@@ -262,23 +309,24 @@ if __name__ == '__main__':
             subj_ner, obj_ner = types
             try:
                 if n_printed < max_printed:
-                    print '# sentence'
-                    print ' '.join(debug_words)
-                    print '# span (word, parse, ner)'
+                    print >> out_file, '# sentence'
+                    print >> out_file, ' '.join(debug_words)
+                    print >> out_file, '# span (word, parse, ner)'
                     for word, parse, ner in zip(words, parse, ner):
-                        print word, parse, ner
-                    print '# subject type'
-                    print subj_ner
-                    print '# object type'
-                    print obj_ner
-                    print '# relation'
-                    print rel
-                    print '# subject'
-                    print subj
-                    print '# object'
-                    print obj
-                    print
+                        print >> out_file, word, parse, ner
+                    print >> out_file, '# subject type'
+                    print >> out_file, subj_ner
+                    print >> out_file, '# object type'
+                    print >> out_file, obj_ner
+                    print >> out_file, '# relation'
+                    print >> out_file, rel
+                    print >> out_file, '# subject'
+                    print >> out_file, subj
+                    print >> out_file, '# object'
+                    print >> out_file, obj
+                    print >> out_file, ''
                     n_printed += 1
             except UnicodeEncodeError as e:
                 continue
+    out_file.close()
     print 'done', total, 'in total'

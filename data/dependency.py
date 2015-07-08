@@ -4,6 +4,8 @@ import json
 
 def parse_words(words):
     parsed = words[2:-2].split('","')
+    isdigit = unicode.isdigit if isinstance(parsed[0], unicode) else str.isdigit
+    parsed = ['0'*len(word) if isdigit(word) else word for word in parsed]
     return parsed
 
 def make_graph(parse):

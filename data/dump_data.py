@@ -40,10 +40,11 @@ if __name__ == '__main__':
             words = parse_words(ex.words)
             if ex.relation != 'no_relation' and (ex.subject_ner, ex.object_ner, ex.relation) not in valid and (ex.object_ner, ex.subject_ner, ex.relation) not in valid:
                 if ex.subject_ner != 'MISC' and ex.object_ner != 'MISC':
-                    # print words
-                    # print ' '.join(words[int(ex.subject_begin):int(ex.subject_end)]), ex.subject_ner
-                    # print ' '.join(words[int(ex.object_begin):int(ex.object_end)]), ex.object_ner
-                    # print ex.relation
+                    print ' '.join(words)
+                    print ' '.join(words[int(ex.subject_begin):int(ex.subject_end)]), ex.subject_ner
+                    print ' '.join(words[int(ex.object_begin):int(ex.object_end)]), ex.object_ner
+                    print ex.relation
+                    print
                     num_bad += 1
 
             seen.add(key)
