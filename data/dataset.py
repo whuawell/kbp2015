@@ -83,8 +83,6 @@ class ExampleAdaptor(object):
 
         try:
             dependency_path = get_path_from_parse(example.dependency, subject_begin, subject_end, object_begin, object_end)
-            if not dependency_path:
-                raise NoPathException()
         except NoPathException as e:
             sys.stderr.write("cannot find parse span in example (json)\n")
             sys.stderr.write(json.dumps(example) + "\n")
@@ -103,9 +101,9 @@ class ExampleAdaptor(object):
         for i in xrange(object_begin, object_end):
             index2ner[i] = example.object_ner
 
-        first_from_, _, first_edge = dependency_path[0]
-        first_word = index2word[first_from_]
-        first_ner = index2ner[first_from_]
+        first_ner = example.object_ner
+        first_edge = pad
+        last_ner = example.subject_ner
 
         # manually fill the first step
         words.append(self.vocab['word'].add(first_ner))
@@ -127,8 +125,8 @@ class ExampleAdaptor(object):
             parse.append(edge)
             ners.append(to_ner_index)
 
-        last_to_ = to_
-        last_word = index2ner[last_to_]
+            last_to_ = to_
+            last_ner = index2ner[last_to_]
 
         def is_entity_token(i):
             return (i >= subject_begin and i < subject_end) or (i >= object_begin and i < object_end)
@@ -147,7 +145,7 @@ class ExampleAdaptor(object):
             parse = parse[:-1]
             ners = ners[:-1]
 
-        words[-1] = self.vocab['word'].add(last_word)
+        words[-1] = self.vocab['word'].add(last_ner)
 
         rel = self.vocab['rel'].add(example.relation) if 'relation' in example.keys() else None
         subject_ner, object_ner = [self.vocab['ner'].add(k) for k in [example.subject_ner, example.object_ner]]
