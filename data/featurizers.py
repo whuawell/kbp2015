@@ -1,7 +1,7 @@
 __author__ = 'victor'
 from dataset import Example, Vocab
 import numpy as np
-from dependency import NoPathException
+from dependency import NoPathException, DependencyParse
 
 
 def one_hot(y, num_classes):
@@ -12,16 +12,14 @@ def one_hot(y, num_classes):
 
 class Featurizer(object):
 
-    def __init__(self, vocab=None):
-        if vocab is None:
-            vocab = {
-                'rel': Vocab(unk=False),
-                'ner': Vocab(unk=False),
-                'dep': Vocab(unk=False),
-                'pos': Vocab(unk=False),
-                'word': Vocab(unk='UNKNOWN'),
-            }
-        self.vocab = vocab
+    def __init__(self, **vocab_kwargs):
+        self.vocab = {
+            'rel': vocab_kwargs.get('rel', Vocab()),
+            'ner': vocab_kwargs.get('ner', Vocab(unk='O')),
+            'dep': vocab_kwargs.get('dep', Vocab()),
+            'pos': vocab_kwargs.get('pos', Vocab(unk='.')),
+            'word': vocab_kwargs.get('word', Vocab(unk='UNKNOWN')),
+        }
 
     @classmethod
     def get_token(cls, ex, index):
@@ -39,6 +37,8 @@ class Featurizer(object):
             'relation': self.vocab['rel'].get(ex.relation, add=add) if ex.relation else None,
             'subject_ner': self.vocab['ner'].get(ex.subject_ner, add=add),
             'object_ner': self.vocab['ner'].get(ex.object_ner, add=add),
+            'dependency': DependencyParse(ex.dependency, enhanced=True).get_path_from_parse(
+                ex.subject_begin, ex.subject_end, ex.object_begin, ex.object_end),
             'orig': self,
         })
 
@@ -48,7 +48,7 @@ class SinglePathFeaturizer(Featurizer):
     def featurize(self, ex, add=False):
         feat = super(SinglePathFeaturizer, self).featurize(ex, add)
         sequence = []
-        for from_, to_, arc in ex.dependency:
+        for from_, to_, arc in feat.dependency:
             if arc == 'root':
                 continue
             sequence += [self.get_token(ex, from_), arc]
@@ -64,7 +64,7 @@ class ConcatenatedFeaturizer(Featurizer):
     def featurize(self, ex, add=False):
         feat = super(ConcatenatedFeaturizer, self).featurize(ex, add)
         sequence = []
-        for child, parent, arc in ex.dependency:
+        for child, parent, arc in feat.dependency:
             if arc.endswith('_from') or arc == 'root':
                 token = self.get_token(ex, child)
                 ner = ex.ner[child]
@@ -75,15 +75,19 @@ class ConcatenatedFeaturizer(Featurizer):
                 pos = ex.pos[parent]
             else:
                 raise Exception('Unknown arc type ' + arc)
+            child = ex.words[child]
+            parent = ex.words[parent] if parent else None
             sequence.append([token, ner, pos, arc])
         ex.sequence = sequence
         feat.sequence = []
         for i, tup in enumerate(ex.sequence):
             word, ner, pos, arc = tup
+            if not add and arc not in self.vocab['dep']:
+                arc = 'dep_from' if arc.endswith('_from') else 'dep_to'
+
             feat.sequence.append([self.vocab['word'].get(word, add),
                                   self.vocab['ner'].get(ner, add),
                                   self.vocab['pos'].get(pos, add),
                                   self.vocab['dep'].get(arc, add)])
         ex.length = feat.length = len(sequence)
         return feat
-

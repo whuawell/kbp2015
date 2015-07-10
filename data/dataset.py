@@ -1,5 +1,11 @@
 __author__ = 'victor'
 from collections import Counter
+import numpy as np
+import json
+import cPickle as pkl
+import sys
+from pprint import pformat
+import os
 
 
 class Example(dict):
@@ -10,7 +16,6 @@ class Example(dict):
 
 
 class Vocab(object):
-
     def __init__(self, unk=None):
         self.word2index = {}
         self.index2word = []
@@ -65,290 +70,85 @@ class Vocab(object):
         return v
 
 
+class Split(object):
+
+    ignore_relations = {'org:website', 'org:date_founded'}
+
+    def __init__(self, generator, featurizer, add=False, handle_no_path='short'):
+        self.ex = []
+        self.length_map = {}
+        for ex in generator:
+            if ex.relation in self.ignore_relations:
+                continue
+            try:
+                feat = featurizer.featurize(ex, add=add)
+            except NoPathException as e:
+                if handle_no_path == 'ignore':
+                    continue
+                elif handle_no_path == 'raise':
+                    raise e
+                elif handle_no_path == 'short':
+                    print >> sys.stderr, 'Warning: Could not find path between entities in parse'
+                    print >> sys.stderr, ' '.join(ex.words)
+                else:
+                    print >> sys.stderr, 'Warning: Could not find path between entities in parse'
+                    print >> sys.stderr, ' '.join(ex.words)
+                    print >> sys.stderr, ex.dependency
+            except:
+                print >> sys.stderr, "Error: Could not featurizer example"
+                print >> sys.stderr, pformat(ex)
+                raise
+
+            if feat.length not in self.length_map:
+                self.length_map[feat.length] = []
+            self.length_map[feat.length] += [feat]
+
+    def batches(self, batch_size=128):
+        lengths = self.length_map.keys()
+        np.random.shuffle(lengths)
+        for length in lengths:
+            examples = self.length_map[length]
+            X = np.array([e.sequence for e in examples])
+            Y = np.array([e.relation for e in examples])
+            for i in xrange(0, len(examples), batch_size):
+                yield X[i:i+batch_size], Y[i:i+batch_size]
 
 
-#
-# class UnseenExampleError(Exception):
-#     pass
-#
-# class ExampleAdaptor(object):
-#
-#     punctuation = set(string.punctuation)
-#     NUM = '1'
-#     PUNC = '.'
-#
-#     def __init__(self, vocab):
-#         self.vocab = vocab
-#
-#     def convert(self, example, unk='UNKNOWN', tokenize=parse_words, kbp=False):
-#         index2word = tokenize(example.words)
-#         index2word = [w.lower() for w in index2word]
-#         index2ner = tokenize(example.ner)
-#         subject_begin, subject_end, object_begin, object_end = [int(example[k]) for k in ['subject_begin', 'subject_end', 'object_begin', 'object_end']]
-#         subj = ' '.join(index2word[subject_begin:subject_end])
-#         obj = ' '.join(index2word[object_begin:object_end])
-#
-#         try:
-#             dependency_path = get_path_from_parse(example.dependency, subject_begin, subject_end, object_begin, object_end)
-#         except NoPathException as e:
-#             sys.stderr.write("cannot find parse span in example (json)\n")
-#             sys.stderr.write(json.dumps(example) + "\n")
-#             raise e
-#
-#         words = []
-#         parse = []
-#         ners = []
-#         word_span_index = []
-#         pad = '**PAD**'
-#         pad_index = self.vocab['dep'].add(pad)
-#
-#         # backfill NER tags with manual overrides from Gabor
-#         for i in xrange(subject_begin, subject_end):
-#             index2ner[i] = example.subject_ner
-#         for i in xrange(object_begin, object_end):
-#             index2ner[i] = example.object_ner
-#
-#         first_ner = example.object_ner
-#         first_edge = pad
-#         last_ner = example.subject_ner
-#
-#         get_word = lambda w: self.vocab['word'].word2index.get(w, self.vocab['word'][unk]) if kbp else self.vocab['word'].add(w)
-#         get_ner = lambda w: self.vocab['ner'].word2index.get(w, None) if kbp else self.vocab['ner'].add(w)
-#         get_dep = lambda w: self.vocab['dep'].word2index.get(w, None) if kbp else self.vocab['dep'].add(w)
-#         get_rel = lambda w: self.vocab['rel'].word2index.get(w, None) if kbp else self.vocab['rel'].add(w)
-#
-#         def get_or_except(get, w):
-#             if get == get_word:
-#                 if isinstance(w, unicode) and unicode.isdigit(w):
-#                     w = '0' * len(w)
-#                 elif isinstance(w, str) and str.isdigit(w):
-#                     w = '0' * len(w)
-#             got = get(w)
-#             if got is None:
-#                 e = UnseenExampleError("in %s, can not construct example with unseen feature %s" % (get, w))
-#                 if get == get_ner and w == 'EMAIL':
-#                     return get_or_except(get_ner, 'O')
-#                 if get == get_rel:
-#                     e.skippable = True
-#                 raise e
-#             return got
-#
-#         # manually fill the first step
-#         words.append(get_or_except(get_word, first_ner))
-#         parse.append(get_or_except(get_dep, first_edge))
-#         ners.append(get_or_except(get_ner, first_ner))
-#
-#         for from_, to_, edge_ in dependency_path:
-#             from_word, to_word = [index2word[i] for i in [from_, to_]]
-#             from_word_index, to_word_index = [get_or_except(get_word, w) for w in [from_word, to_word]]
-#             from_ner, to_ner = [index2ner[i] for i in [from_, to_]]
-#             from_ner_index, to_ner_index = [get_or_except(get_ner, w) for w in [from_ner, to_ner]]
-#             edge = get_or_except(get_dep, edge_)
-#
-#             word_span_index.append(to_)
-#             words.append(to_word_index)
-#             parse.append(edge)
-#             ners.append(to_ner_index)
-#
-#             last_to_ = to_
-#             last_ner = index2ner[last_to_]
-#
-#         def is_entity_token(i):
-#             return (i >= subject_begin and i < subject_end) or (i >= object_begin and i < object_end)
-#
-#         # keep removing first word until 1 word is part of the entity
-#         while len(word_span_index) > 1 and is_entity_token(word_span_index[1]):
-#             word_span_index = word_span_index[1:]
-#             words = words[1:]
-#             parse = parse[1:]
-#             ners = ners[1:]
-#
-#         # keep removing last word until 1 word is part of the entity
-#         while len(word_span_index) > 1 and is_entity_token(word_span_index[-2]):
-#             word_span_index = word_span_index[:-1]
-#             words = words[:-1]
-#             parse = parse[:-1]
-#             ners = ners[:-1]
-#
-#         words[-1] = get_or_except(get_word, last_ner)
-#
-#         rel = get_or_except(get_rel, example.relation) if 'relation' in example.keys() else None
-#         subject_ner, object_ner = [get_or_except(get_ner, k) for k in [example.subject_ner, example.object_ner]]
-#
-#         return Example(words=words, parse=parse, ner=ners, subject_ner=subject_ner, object_ner=object_ner, relation=rel,
-#                        subject=subj, object=obj, debug=index2word)
-#
-#
-# class SplitAdaptor(object):
-#
-#     def __init__(self, example_adaptor):
-#         self.example_adaptor = example_adaptor
-#
-#     def convert(self, split, unk='UNKNOWN'):
-#         my_split = Split()
-#         lengths = {}
-#         idx = no_path = 0
-#         for i, ex in enumerate(split.examples):
-#             try:
-#                 ex = self.example_adaptor.convert(ex, unk=unk)
-#             except NoPathException as e:
-#                 no_path += 1
-#                 continue
-#             l = len(ex.words)
-#             if l == 0:
-#                 continue
-#             my_split.add(ex)
-#             if l not in lengths:
-#                 lengths[l] = []
-#             lengths[l].append(idx)
-#             idx += 1
-#             if i % 1000 == 0:
-#                 print 'converted', i, 'out of', len(split.examples)
-#         my_split.lengths = lengths
-#         print 'found', no_path, 'no path exceptions'
-#         return my_split
-#
-#
-# class AnnotatedData(object):
-#
-#     def __init__(self, splits, vocab, word2emb):
-#         self.vocab = vocab
-#         self.splits = splits
-#         self.word2emb = word2emb
-#
-#     @classmethod
-#     def build(cls, pretrained='senna', unk='UNKNOWN'):
-#         word_vocab, word2emb = load_pretrained(pretrained)
-#         vocab = {'word':word_vocab,
-#                  'rel': Vocab(unk=False),
-#                  'ner': Vocab(unk=False),
-#                  'dep': Vocab(unk=False)}
-#         raw = Dataset.load(os.path.join(mydir, 'annotated'))
-#         example_adaptor = ExampleAdaptor(vocab)
-#         split_adaptor = SplitAdaptor(example_adaptor)
-#         splits = {name:split_adaptor.convert(split, unk=unk) for name, split in raw.splits.items()}
-#         return AnnotatedData(splits, vocab, word2emb)
-#
-#     def save(self, to_dir):
-#         if not os.path.isdir(to_dir):
-#             os.makedirs(to_dir)
-#         with open(os.path.join(to_dir, 'config.json'), 'wb') as f:
-#             json.dump({'splits': self.splits.keys()}, f)
-#         with open(os.path.join(to_dir, 'vocabs.pkl'), 'wb') as f:
-#             pkl.dump(self.vocab, f, protocol=pkl.HIGHEST_PROTOCOL)
-#         with open(os.path.join(to_dir, 'word2emb.pkl'), 'wb') as f:
-#             pkl.dump(self.word2emb, f, protocol=pkl.HIGHEST_PROTOCOL)
-#         for name, split in self.splits.items():
-#             split.save(os.path.join(to_dir, name))
-#
-#     @classmethod
-#     def load(cls, from_dir):
-#         with open(os.path.join(from_dir, 'config.json')) as f:
-#             config = json.load(f)
-#         with open(os.path.join(from_dir, 'vocabs.pkl')) as f:
-#             vocabs = pkl.load(f)
-#         splits = {name:Split.load(os.path.join(from_dir, name)) for name in config['splits']}
-#         with open(os.path.join(from_dir, 'word2emb.pkl')) as f:
-#             word2emb = pkl.load(f)
-#         return AnnotatedData(splits, vocabs, word2emb)
-#
-#     def generate_batches(self, name, batch_size=128, label='classification', to_one_hot=True, debug=False):
-#         assert label in ['classification', 'filter', 'raw']
-#         split = self.splits[name]
-#         order = split.lengths.keys()
-#         random.shuffle(order)
-#
-#         for l in order:
-#             x_words, x_parse, x_ner, x_types, y = [], [], [], [], []
-#             debug_dump = []
-#             for idx in split.lengths[l]:
-#                 ex = split.examples[idx]
-#                 x_words.append(ex.words)
-#                 x_parse.append(ex.parse)
-#                 x_ner.append(ex.ner)
-#                 x_types.append([ex.subject_ner, ex.object_ner])
-#                 y.append(ex.relation)
-#                 if debug:
-#                     debug_dump.append([ex.debug, ex.subject, ex.object])
-#             X = [np.array(x_words), np.array(x_parse), np.array(x_ner), np.array(x_types)]
-#             Y = np.array(y)
-#             if label == 'classification':
-#                 if to_one_hot:
-#                     Y = one_hot(Y, len(self.vocab['rel']))
-#             elif label == 'filter':
-#                 related = Y != self.vocab['rel']['no_relation']
-#                 Y.fill(0.)
-#                 Y[related] = 1.
-#                 Y = Y.reshape((-1, 1))
-#             if len(Y):
-#                 # this can turn out to be false if non of the examples pass the filter
-#                 if debug:
-#                     yield X, Y, debug_dump
-#                 else:
-#                     yield X, Y
+class Dataset(object):
+
+    def __init__(self, train, dev, featurizer):
+        self.train, self.dev, self.featurizer = train, dev, featurizer
+
+    @classmethod
+    def build(cls, train_generator, dev_generator, featurizer):
+        train = Split(train_generator, featurizer, add=True)
+        dev = Split(dev_generator, featurizer, add=False)
+        return Dataset(train, dev, featurizer)
+
+    def save(self, to_dir):
+        if not os.path.isdir(to_dir):
+            os.makedirs(to_dir)
+        with open(os.path.join(to_dir, 'data.pkl'), 'wb') as f:
+            pkl.dump(self, f, protocol=pkl.HIGHEST_PROTOCOL)
+
+    @classmethod
+    def load(cls, from_dir):
+        with open(os.path.join(from_dir, 'data.pkl')) as f:
+            return pkl.load(f)
+
 
 if __name__ == '__main__':
-    from docopt import docopt
-    from pprint import pprint
-    args = docopt(__doc__)
-    pprint(args)
-    max_printed = int(args['--max_printed'])
-    if max_printed < 0:
-        max_printed = np.inf
-    pretrained = args['--pretrained']
-    unk = args['--unk']
+    from adaptors import *
+    from featurizers import *
+    from pretrain import Senna
 
-    save = pretrained
-    if os.path.isdir(save) and not args['--overwrite']:
-        d = AnnotatedData.load(save)
+    train_generator = SupervisedDataAdaptor().to_examples('raw/supervision.csv')
+    dev_generator = KBPEvaluationDataAdaptor().to_examples('raw/evaluation.tsv')
+    featurizer = ConcatenatedFeaturizer(word=Senna())
+
+    save = 'saves/supervision_evaluation'
+    if not os.path.isdir(save):
+        dataset = Dataset.build(train_generator, dev_generator, featurizer)
+        dataset.save(save)
     else:
-        d = AnnotatedData.build(unk=unk, pretrained=pretrained)
-        d.save(save)
-
-    typechecker = TypeCheckAdaptor(d.vocab)
-    valid_types = typechecker.load_valid()
-    print 'loaded', valid_types.sum(), 'valid types'
-
-    num_neg = num_pos = 0
-    for X, Y in d.generate_batches('train', label='filter'):
-        num_pos += Y.sum()
-        num_neg += len(Y) - Y.sum()
-    print 'num_pos', num_pos, 'num_neg', num_neg
-
-    n_printed = total = 0
-    out_file = open('aligned.txt', 'wb')
-    for X, Y, Debug in d.generate_batches('train', to_one_hot=False, debug=True):
-        Xwords, Xparse, Xner, Xtypes = X
-        total += len(X)
-        args = X + [Debug, Y]
-        for xwords, xparse, xner, xtypes, debug, y in zip(*args):
-            debug_words, subj, obj = debug
-            words = [d.vocab['word'].index2word[i] for i in xwords]
-            parse = [d.vocab['dep'].index2word[i] for i in xparse]
-            ner = [d.vocab['ner'].index2word[i] for i in xner]
-            types = [d.vocab['ner'].index2word[i] for i in xtypes]
-            rel = d.vocab['rel'].index2word[y]
-            subj_ner, obj_ner = types
-            try:
-                if n_printed < max_printed:
-                    print >> out_file, '# sentence'
-                    print >> out_file, ' '.join(debug_words)
-                    print >> out_file, '# span (word, parse, ner)'
-                    for word, parse, ner in zip(words, parse, ner):
-                        print >> out_file, word, parse, ner
-                    print >> out_file, '# subject type'
-                    print >> out_file, subj_ner
-                    print >> out_file, '# object type'
-                    print >> out_file, obj_ner
-                    print >> out_file, '# relation'
-                    print >> out_file, rel
-                    print >> out_file, '# subject'
-                    print >> out_file, subj
-                    print >> out_file, '# object'
-                    print >> out_file, obj
-                    print >> out_file, ''
-                    n_printed += 1
-            except UnicodeEncodeError as e:
-                continue
-    out_file.close()
-    print 'done', total, 'in total'
+        dataset = Dataset.load(save)

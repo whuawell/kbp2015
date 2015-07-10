@@ -62,7 +62,7 @@ class DependencyParse(object):
         return edges
 
     def get_path(self, node1, node2, g):
-        path = g.shortest_path(node1, node2)
+        path = g.shortest_path(node1, node2, directed=False)
         if path is None:
             raise NoPathException("cannot find path between entities!")
         curr = node1

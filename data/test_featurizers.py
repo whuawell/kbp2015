@@ -10,9 +10,9 @@ class TestFeaturizer(object):
     ner = ['DATE', 'O', 'PERSON', 'PERSON', 'O', 'O', 'O', 'O']
     pos = ['NN', ',', 'NNP', 'NNP', 'VBD', 'NN', 'IN', 'NN']
     dep = [
-        [words.index('curry'), words.index('had'), 'dobj_from'],
+        [words.index('curry'), words.index('had'), 'dobj'],
         [words.index('had'), None, 'root'],
-        [words.index('had'), words.index('Curry'), 'nsubj_to'],
+        [words.index('Curry'), words.index('had'), 'nsubj'],
     ]
 
 
@@ -28,8 +28,8 @@ class TestSingleSequence(unittest.TestCase, TestFeaturizer):
         got = self.featurizer.featurize(ex, True)
         self.assertItemsEqual(self.featurizer.vocab['ner'].index2word, ['PERSON', 'O'])
         self.assertItemsEqual(self.featurizer.vocab['word'].index2word, ['UNKNOWN', 'O', 'dobj_from', 'had', 'nsubj_to', 'PERSON'])
-        self.assertEqual(got.subject_ner, 0)
-        self.assertEqual(got.object_ner, 1)
+        self.assertEqual(got.subject_ner, self.featurizer.vocab['ner']['PERSON'])
+        self.assertEqual(got.object_ner, self.featurizer.vocab['ner']['O'])
         self.assertEqual([self.featurizer.vocab['word'].index2word[w] for w in got.sequence],
                          ['O', 'dobj_from', 'had', 'nsubj_to', 'PERSON'])
 
@@ -46,14 +46,14 @@ class TestConcatenated(unittest.TestCase, TestFeaturizer):
         got = self.featurizer.featurize(ex, True)
         self.assertItemsEqual(self.featurizer.vocab['ner'].index2word, ['PERSON', 'O'])
         self.assertItemsEqual(self.featurizer.vocab['word'].index2word, ['UNKNOWN', 'O', 'had', 'PERSON'])
-        self.assertItemsEqual(self.featurizer.vocab['pos'].index2word, ['NN', 'VBD', 'NNP'])
+        self.assertItemsEqual(self.featurizer.vocab['pos'].index2word, ["''", 'NN', 'VBD', 'NNP'])
         self.assertItemsEqual(self.featurizer.vocab['dep'].index2word, ['dobj_from', 'root', 'nsubj_to'])
-        self.assertEqual(got.subject_ner, 0)
-        self.assertEqual(got.object_ner, 1)
         word = lambda w: self.featurizer.vocab['word'][w]
         ner = lambda w: self.featurizer.vocab['ner'][w]
         dep = lambda w: self.featurizer.vocab['dep'][w]
         pos = lambda w: self.featurizer.vocab['pos'][w]
+        self.assertEqual(got.subject_ner, ner('PERSON'))
+        self.assertEqual(got.object_ner, ner('O'))
         expect = [
             [word('O'), ner('O'), pos('NN'), dep('dobj_from')],
             [word('had'), ner('O'), pos('VBD'), dep('root')],

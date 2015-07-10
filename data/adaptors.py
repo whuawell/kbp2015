@@ -109,12 +109,25 @@ class KBPEvaluationDataAdaptor(KBPDataAdaptor):
                'subject_begin', 'subject_end', 'object_begin', 'object_end',
                'known_relations', 'incompatible_relations', 'annotated_relations']
 
+    relation_map = {
+        'per:employee_or_member_of': 'per:employee_of',
+        'org:top_members_employees': 'org:top_members/employees',
+        'per:statesorprovinces_of_residence': 'per:stateorprovinces_of_residence',
+        'org:number_of_employees_members': 'org:number_of_employees/members',
+        'org:political_religious_affiliation': 'org:political/religious_affiliation',
+        '': 'no_relation',
+    }
+
     def to_example(self, row):
         d = dict(zip(self.headers, row))
         assert len(d) == len(self.headers), "could not convert row to example %s\n%s" % (row, d)
         ex = Example(**d)
         rels = self.parse_array(ex.known_relations)
-        ex.relation = rels[0] if rels else 'no_relation'
+        ex.relation = rels[0]
+        for k in ['pos']:
+            ex[k] = ex[k].replace('`', "'")
+        if ex.relation in self.relation_map:
+            ex.relation = self.relation_map[ex.relation]
         for k in ['dependency', 'dep_extra', 'dep_malt']:
             ex[k] = ex[k].replace("\\n", "\n").replace("\\t", "\t")
         return self.convert_types(ex)
