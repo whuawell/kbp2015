@@ -63,6 +63,8 @@ class TypeCheckAdaptor(object):
         valid_types[:, self.vocab['ner']['MISC'], :] = 1
         return valid_types
 
+class UnseenExampleError(Exception):
+    pass
 
 class ExampleAdaptor(object):
 
@@ -73,7 +75,7 @@ class ExampleAdaptor(object):
     def __init__(self, vocab):
         self.vocab = vocab
 
-    def convert(self, example, unk='UNKNOWN', tokenize=parse_words):
+    def convert(self, example, unk='UNKNOWN', tokenize=parse_words, kbp=False):
         index2word = tokenize(example.words)
         index2word = [w.lower() for w in index2word]
         index2ner = tokenize(example.ner)
@@ -105,20 +107,38 @@ class ExampleAdaptor(object):
         first_edge = pad
         last_ner = example.subject_ner
 
-        # manually fill the first step
-        words.append(self.vocab['word'].add(first_ner))
-        parse.append(self.vocab['dep'].add(first_edge))
-        ners.append(self.vocab['ner'].add(first_ner))
+        get_word = lambda w: self.vocab['word'].word2index.get(w, self.vocab['word'][unk]) if kbp else self.vocab['word'].add(w)
+        get_ner = lambda w: self.vocab['ner'].word2index.get(w, None) if kbp else self.vocab['ner'].add(w)
+        get_dep = lambda w: self.vocab['dep'].word2index.get(w, None) if kbp else self.vocab['dep'].add(w)
+        get_rel = lambda w: self.vocab['rel'].word2index.get(w, None) if kbp else self.vocab['rel'].add(w)
 
-        # get_word = lambda w: self.vocab['word'].word2index.get(w, self.vocab['word'][unk]) # use unks
-        get_word = lambda w: self.vocab['word'].add(w) # don't use unks
+        def get_or_except(get, w):
+            if get == get_word:
+                if isinstance(w, unicode) and unicode.isdigit(w):
+                    w = '0' * len(w)
+                elif isinstance(w, str) and str.isdigit(w):
+                    w = '0' * len(w)
+            got = get(w)
+            if got is None:
+                e = UnseenExampleError("in %s, can not construct example with unseen feature %s" % (get, w))
+                if get == get_ner and w == 'EMAIL':
+                    return get_or_except(get_ner, 'O')
+                if get == get_rel:
+                    e.skippable = True
+                raise e
+            return got
+
+        # manually fill the first step
+        words.append(get_or_except(get_word, first_ner))
+        parse.append(get_or_except(get_dep, first_edge))
+        ners.append(get_or_except(get_ner, first_ner))
 
         for from_, to_, edge_ in dependency_path:
             from_word, to_word = [index2word[i] for i in [from_, to_]]
-            from_word_index, to_word_index = [get_word(w) for w in [from_word, to_word]]
+            from_word_index, to_word_index = [get_or_except(get_word, w) for w in [from_word, to_word]]
             from_ner, to_ner = [index2ner[i] for i in [from_, to_]]
-            from_ner_index, to_ner_index = [self.vocab['ner'].add(w) for w in [from_ner, to_ner]]
-            edge = self.vocab['dep'].add(edge_)
+            from_ner_index, to_ner_index = [get_or_except(get_ner, w) for w in [from_ner, to_ner]]
+            edge = get_or_except(get_dep, edge_)
 
             word_span_index.append(to_)
             words.append(to_word_index)
@@ -145,14 +165,13 @@ class ExampleAdaptor(object):
             parse = parse[:-1]
             ners = ners[:-1]
 
-        words[-1] = self.vocab['word'].add(last_ner)
+        words[-1] = get_or_except(get_word, last_ner)
 
-        rel = self.vocab['rel'].add(example.relation) if 'relation' in example.keys() else None
-        subject_ner, object_ner = [self.vocab['ner'].add(k) for k in [example.subject_ner, example.object_ner]]
+        rel = get_or_except(get_rel, example.relation) if 'relation' in example.keys() else None
+        subject_ner, object_ner = [get_or_except(get_ner, k) for k in [example.subject_ner, example.object_ner]]
 
         return Example(words=words, parse=parse, ner=ners, subject_ner=subject_ner, object_ner=object_ner, relation=rel,
-                       subject=' '.join(index2word[int(example.subject_begin):int(example.subject_end)]),
-                       object=' '.join(index2word[int(example.object_begin):int(example.object_end)]), debug=index2word)
+                       subject=subj, object=obj, debug=index2word)
 
 
 class SplitAdaptor(object):

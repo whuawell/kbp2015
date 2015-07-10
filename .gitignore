@@ -1,4 +1,10 @@
 # Byte-compiled / optimized / DLL files
+*.report
+*.comparison
+*.analysis
+*.out.*
+*.out
+*.tsv
 *.zip
 __pycache__/
 *.py[cod]

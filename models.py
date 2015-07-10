@@ -127,7 +127,7 @@ def sent_parse_ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activat
     W = word_emb.get_weights()[0]
     W = load_pretrained(word2emb, vocab, W)
     word_emb.set_weights([W])
-    # word_emb.constraints = word_emb.params = word_emb.regularizers = []
+    word_emb.constraints = word_emb.params = word_emb.regularizers = []
     word_net = Sequential()
     word_net.add(word_emb)
     dep_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=UnitNorm())
