@@ -2,6 +2,8 @@ __author__ = 'victor'
 import csv
 import os
 import numpy as np
+from theano import tensor as T, shared
+from keras.objectives import categorical_crossentropy
 
 class TypeCheckAdaptor(object):
 
@@ -17,6 +19,14 @@ class TypeCheckAdaptor(object):
     def get_valid_cpu(self, ner1, ner2):
         valid = self.valid_types[ner1, ner2]
         return valid
+
+    def filtered_crossentropy(self, targ, pred):
+        ner1 = T.cast(targ[:, -2], 'int32')
+        ner2 = T.cast(targ[:, -1], 'int32')
+        valid = self.get_valid(ner1, ner2)
+        y_pred = T.nnet.softmax(valid * pred)
+        y_targ = targ[:, :-2]
+        return categorical_crossentropy(y_targ, y_pred)
 
     def load_valid_types(self, fname, vocab):
         valid_types = np.zeros((len(vocab['ner']), len(vocab['ner']), len(vocab['rel'])), dtype='float32')
@@ -35,4 +45,3 @@ class TypeCheckAdaptor(object):
         valid_types[vocab['ner']['MISC'], :, :] = 1
         valid_types[:, vocab['ner']['MISC'], :] = 1
         return valid_types
-

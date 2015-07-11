@@ -4,12 +4,6 @@ import numpy as np
 from dependency import NoPathException, DependencyParse
 
 
-def one_hot(y, num_classes):
-    Y = np.zeros((len(y), num_classes), dtype='float32')
-    Y[np.arange(len(y)), y] = 1.
-    return Y
-
-
 class Featurizer(object):
 
     def __init__(self, **vocab_kwargs):
@@ -42,6 +36,11 @@ class Featurizer(object):
             'orig': self,
         })
 
+    def one_hot(self, y):
+        Y = np.zeros((y.size, len(self.vocab['rel'])))
+        Y[np.arange(len(y)), y] = 1
+        return Y.astype('float32')
+
 
 class SinglePathFeaturizer(Featurizer):
 
@@ -57,6 +56,21 @@ class SinglePathFeaturizer(Featurizer):
         feat.sequence = [self.vocab['word'].get(w, add) for w in ex.sequence]
         ex.length = feat.length = len(sequence)
         return feat
+
+    def to_matrix(self, examples):
+        X = {'word_input': []}
+        Y = {'p_relation': []}
+        types = []
+        for ex in examples:
+            X['word_input'].append(ex.sequence)
+            Y['p_relation'].append(ex.relation)
+            types.append([ex.subject_ner, ex.object_ner])
+        X['word_input'] = np.array(X['word_input'])
+        Y['p_relation'] = self.one_hot(np.array(Y['p_relation']))
+        # double check lengths
+        for k, v in X.items():
+            assert len(v) == len(Y['p_relation'])
+        return X, Y, np.array(types)
 
 
 class ConcatenatedFeaturizer(Featurizer):
@@ -79,15 +93,31 @@ class ConcatenatedFeaturizer(Featurizer):
             parent = ex.words[parent] if parent else None
             sequence.append([token, ner, pos, arc])
         ex.sequence = sequence
-        feat.sequence = []
+        feat.words, feat.ner, feat.pos, feat.arc = [], [], [], []
         for i, tup in enumerate(ex.sequence):
             word, ner, pos, arc = tup
             if not add and arc not in self.vocab['dep']:
                 arc = 'dep_from' if arc.endswith('_from') else 'dep_to'
-
-            feat.sequence.append([self.vocab['word'].get(word, add),
-                                  self.vocab['ner'].get(ner, add),
-                                  self.vocab['pos'].get(pos, add),
-                                  self.vocab['dep'].get(arc, add)])
+            feat.words.append(self.vocab['word'].get(word, add))
+            feat.ner.append(self.vocab['ner'].get(ner, add))
+            feat.pos.append(self.vocab['pos'].get(pos, add))
+            feat.arc.append(self.vocab['dep'].get(arc, add))
         ex.length = feat.length = len(sequence)
         return feat
+
+    def to_matrix(self, examples):
+        X = {k: [] for k in ['word_input', 'ner_input', 'pos_input', 'dep_input']}
+        Y = {'p_relation': []}
+        types = []
+        for ex in examples:
+            X['word_input'].append(ex.words)
+            X['ner_input'].append(ex.ner)
+            X['pos_input'].append(ex.pos)
+            X['dep_input'].append(ex.arc)
+            Y['p_relation'].append(ex.relation)
+            types.append([ex.subject_ner, ex.object_ner])
+        Y['p_relation'] = self.one_hot(np.array(Y['p_relation']))
+        # double check lengths
+        for k, v in X.items():
+            assert len(v) == len(Y['p_relation'])
+        return {k: np.array(v) for k, v in X.items()}, Y, np.array(types)

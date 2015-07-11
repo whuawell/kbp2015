@@ -1,8 +1,7 @@
 __author__ = 'victor'
 
 import unittest
-from featurizers import *
-import csv
+from data.featurizers import *
 
 class TestFeaturizer(object):
 
@@ -46,7 +45,7 @@ class TestConcatenated(unittest.TestCase, TestFeaturizer):
         got = self.featurizer.featurize(ex, True)
         self.assertItemsEqual(self.featurizer.vocab['ner'].index2word, ['PERSON', 'O'])
         self.assertItemsEqual(self.featurizer.vocab['word'].index2word, ['UNKNOWN', 'O', 'had', 'PERSON'])
-        self.assertItemsEqual(self.featurizer.vocab['pos'].index2word, ["''", 'NN', 'VBD', 'NNP'])
+        self.assertItemsEqual(self.featurizer.vocab['pos'].index2word, [self.featurizer.vocab['pos'].unk, 'NN', 'VBD', 'NNP'])
         self.assertItemsEqual(self.featurizer.vocab['dep'].index2word, ['dobj_from', 'root', 'nsubj_to'])
         word = lambda w: self.featurizer.vocab['word'][w]
         ner = lambda w: self.featurizer.vocab['ner'][w]
@@ -54,12 +53,10 @@ class TestConcatenated(unittest.TestCase, TestFeaturizer):
         pos = lambda w: self.featurizer.vocab['pos'][w]
         self.assertEqual(got.subject_ner, ner('PERSON'))
         self.assertEqual(got.object_ner, ner('O'))
-        expect = [
-            [word('O'), ner('O'), pos('NN'), dep('dobj_from')],
-            [word('had'), ner('O'), pos('VBD'), dep('root')],
-            [word('PERSON'), ner('PERSON'), pos('NNP'), dep('nsubj_to')],
-        ]
-        self.assertEqual(got.sequence, expect)
+        self.assertEqual(got.words, [word(k) for k in ['O', 'had', 'PERSON']])
+        self.assertEqual(got.ner, [ner(k) for k in ['O', 'O', 'PERSON']])
+        self.assertEqual(got.pos, [pos(k) for k in ['NN', 'VBD', 'NNP']])
+        self.assertEqual(got.arc, [dep(k) for k in ['dobj_from', 'root', 'nsubj_to']])
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,1 @@
+{"truncate_gradient": 50, "model": "concat", "optim": "rmsprop", "activation": "relu", "emb_dim": 50, "lr": 0.01, "dropout": 0.5, "hidden": [300, 300], "data": "data/saves/supervision_evaluation", "reg": 0.001}

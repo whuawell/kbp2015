@@ -1,6 +1,7 @@
-from dataset import Example
 import unittest
-from dependency import DependencyParse
+from data.dependency import DependencyParse
+import os
+mydir = os.path.dirname(os.path.abspath(__file__))
 
 __author__ = 'victor'
 
@@ -38,8 +39,8 @@ class TestDependencyParse(unittest.TestCase):
 
     def test_shorest_real(self):
         import csv
-        from adaptors import KBPDataAdaptor
-        with open('raw/test.sample.tsv') as f:
+        from data.adaptors import KBPDataAdaptor
+        with open(os.path.join(mydir, '..', 'data', 'raw', 'test.sample.tsv')) as f:
             reader = csv.reader(f, delimiter="\t")
             raw = reader.next()
         adaptor = KBPDataAdaptor()

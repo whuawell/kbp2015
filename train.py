@@ -1,92 +1,88 @@
 """ train.py
-Usage: train.py <data> [--model=<MODEL>] [--optim=<OPTIM>] [--epoch=<EPOCH>] [--activation=<ACT>] [--hidden=<HID>]
-                [--dropout=<RATE>] [--truncate_grad=<STEPs>] [--mode=<MODE>] [--lr=<LR>] [--reg=<REG>]
-
+Usage: train.py <name> [--config=<CONFIG>]
 
 Options:
-    --model=<MODEL>     [default: sent_parse_ner]
-    --optim=<OPTIM>     [default: rmsprop]
-    --epoch=<EPOCH>     [default: 300]
-    --activation=<ACT>  [default: relu]
-    --hidden=<HID>      [default: 300,300]
-    --truncate_grad=<STEPS>     [default: 25]
-    --dropout=<RATE>        [default: 0.5]
-    --mode=<MODE>         [default: classification]
-    --lr=<LR>               [default: 0.01]
-    --reg=<REG>             [default: 0]
+    --config=<CONFIG>     [default: default]
 """
-import cPickle as pkl
 import numpy as np
 np.random.seed(42)
 import os
 import sys
-import json
 sys.setrecursionlimit(50000)
 mydir = os.path.dirname(__file__)
 sys.path.append(os.path.join(mydir, 'data'))
-from data.dataset import AnnotatedData, one_hot, TypeCheckAdaptor
-from models import *
-from keras.layers.core import *
-from keras.optimizers import *
-from keras.regularizers import *
-from keras.objectives import *
-from theano import shared
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
+from models import get_model
+from configs.config import Config
+from data.dataset import *
+from data.adaptors import *
+from data.featurizers import *
+from data.typecheck import *
+from data.pretrain import Senna
+from time import time
 
-mydir = os.path.dirname(__file__)
 
-def get_model_from_arg(args, dataset, typechecker):
-    word_emb_dim = len(dataset.word2emb.values()[0])
-    hidden = [int(d) for d in args['--hidden'].split(',')]
-    dropout, lr, reg = [float(args[d]) for d in ['--dropout', '--lr', '--reg']]
-    max_epoch, truncate_grad = [int(args[d]) for d in ['--epoch', '--truncate_grad']]
-    activation = args['--activation']
-    mode = args['--mode']
+class Trainer(object):
 
-    optim = {
-        'adagrad': adagrad(lr=lr, clipnorm=5.),
-        'rmsprop': rmsprop(lr=lr, clipnorm=5.),
-        'sgd': sgd(lr=lr, momentum=0.9, decay=1e-7, nesterov=True, clipnorm=5.),
-        'adadelta': adadelta(lr=lr, clipnorm=5.)
-    }[args['--optim']]
+    def __init__(self, log_dir, model, typechecker, labels):
+        self.model, self.typechecker, self.labels = model, typechecker, labels
+        if not os.path.isdir(log_dir):
+            os.makedirs(log_dir)
+        self.log_dir = log_dir
+        self.logs = {
+            'train': open(os.path.join(self.log_dir, 'train.log'), 'wb'),
+        }
 
-    get_model = {
-        'ner': ner,
-        'sent': sent,
-        'parse': parse,
-        'sent_ner': sent_ner,
-        'sent_parse': sent_parse,
-        'sent_parse_ner': sent_parse_ner,
-    }[args['--model']]
+    def log(self, name, payload):
+        self.logs[name].write(json.dumps(payload, sort_keys=True) + "\n")
 
-    model, model_nout = get_model(dataset.vocab, dataset.word2emb, word_emb_dim, hidden, dropout, activation, truncate_grad, reg)
-    n_out = len(dataset.vocab['rel']) if mode == 'classification' else 1
+    def run_epoch(self, split, train=False, batch_size=128):
+        total = total_loss = 0
+        func = self.model.train_on_batch if train else self.model.test_on_batch
+        ids, preds, targs = [], [], []
+        for idx, X, Y, types in split.batches(batch_size):
+            X.update({k: np.concatenate([v, types], axis=1) for k, v in Y.items()})
+            batch_end = time()
+            loss = func(X)
+            prob = self.model.predict(X, verbose=0)['p_relation']
+            prob *= self.typechecker.get_valid_cpu(types[:, 0], types[:, 1])
+            pred = prob.argmax(axis=1)
 
-    def filtered_categorical_crossentropy(targ, pred):
-        # return categorical_crossentropy(targ, T.nnet.softmax(pred))
-        ner1 = T.cast(targ[:, -2], 'int32')
-        ner2 = T.cast(targ[:, -1], 'int32')
-        valid = typechecker.get_valid(ner1, ner2)
-        y_pred = T.nnet.softmax(valid * pred)
-        y_targ = targ[:, :-2]
-        return categorical_crossentropy(y_targ, y_pred)
+            ids.append(idx)
+            targs.append(Y['p_relation'].argmax(axis=1))
+            preds.append(pred)
+            total_loss += loss
+            total += 1
+        preds = np.concatenate(preds).astype('int32')
+        targs = np.concatenate(targs).astype('int32')
+        ids = np.concatenate(ids).astype('int32')
 
-    def filtered_binary_crossentropy(targ, pred):
-        y_targ = targ
-        y_pred = pred
-        # ner1 = T.cast(targ[:, -2], 'int32')
-        # ner2 = T.cast(targ[:, -1], 'int32')
-        # valid = T.gt(typechecker.get_valid(ner1, ner2).sum(axis=1), 0).reshape((-1, 1))
-        # y_pred = pred * valid
-        return binary_crossentropy(y_targ, y_pred)
+        return {
+            'f1': f1_score(targs, preds, average='micro', labels=self.labels),
+            'precision': precision_score(targs, preds, average='micro', labels=self.labels),
+            'recall': recall_score(targs, preds, average='micro', labels=self.labels),
+            'accuracy': accuracy_score(targs, preds),
+            'loss': total_loss / float(total),
+            }
 
-    loss = filtered_categorical_crossentropy if mode == 'classification' else filtered_binary_crossentropy
+    def train(self, train_split, dev_split=None, max_epoch=150):
+        best_scores, best_weights = 0, None
+        compare = 'f1'
 
-    model.add(Dense(model_nout, n_out))
-    if mode == 'filter':
-        model.add(Activation('sigmoid'))
-    model.compile(optim, loss=loss)
-    return model
+        for epoch in xrange(max_epoch+1):
+            start = time()
+            train_result = self.run_epoch(train_split, True)
+            dev_result = self.run_epoch(dev_split, False) if dev_split else None
+            self.log('train', {'train': train_result, 'dev': dev_result, 'epoch': epoch, 'time': time()-start})
+            if dev_result:
+                if dev_result[compare] > best_scores[compare]:
+                    best_scores = dev_result
+                    best_weights = self.model.get_weights()
+
+        if best_weights is not None:
+            self.model.set_weights(best_weights)
+
+        return best_scores
 
 
 if __name__ == '__main__':
@@ -95,110 +91,31 @@ if __name__ == '__main__':
     args = docopt(__doc__)
     pprint(args)
 
-    name = '_'.join([str(args[k]).strip('/').replace('/', '_') for k in sorted(args.keys())])
+    config = Config.default() if args['--config'] == 'default' else Config.load(args['--config'])
+
+    if not os.path.isdir(config.data):
+        train_generator = SupervisedDataAdaptor().to_examples('raw/supervision.csv')
+        dev_generator = KBPEvaluationDataAdaptor().to_examples('raw/evaluation.tsv')
+        featurizer = {'concat': ConcatenatedFeaturizer(word=Senna()),
+                  'seq': SinglePathFeaturizer(word=Senna())}[config.model]
+
+        dataset = Dataset.build(train_generator, dev_generator, featurizer)
+        dataset.save(save)
+    else:
+        dataset = Dataset.load(config.data)
+
+    name = os.path.join('experiments', args['<name>'])
     todir = os.path.join(mydir, name)
     if not os.path.isdir(todir):
         os.makedirs(todir)
 
-    dataset = AnnotatedData.load(args['<data>'])
-    f1_labels = [i for i in xrange(len(dataset.vocab['rel'])) if i != dataset.vocab['rel']['no_relation']]
+    typechecker = TypeCheckAdaptor(os.path.join(mydir, 'data', 'raw', 'typecheck.csv'), dataset.featurizer.vocab)
+    scoring_labels = [i for i in xrange(len(dataset.featurizer.vocab['rel'])) if i != dataset.featurizer.vocab['rel']['no_relation']]
 
-    sizes = {name:len(split) for name, split in dataset.splits.items()}
-    print json.dumps(sizes)
+    model = get_model(config, dataset.featurizer.vocab, typechecker)
+    trainer = Trainer(todir, model, typechecker, scoring_labels)
+    best_scores = trainer.train(dataset.train, dataset.dev, max_epoch=100)
 
-    typechecker = TypeCheckAdaptor(dataset.vocab)
-    os.chdir(todir)
-
-    with open('args.json', 'wb') as f:
-        json.dump(args, f)
-
-    model = get_model_from_arg(args, dataset, typechecker)
-
-    best_f1, best_weights = 0, None
-    best_loss = np.inf
-
-    def get_XY(X, Y):
-        Xwords, Xparse, Xner, Xtypes = X
-        Xin = {
-            'sent': Xwords,
-            'ner': Xner,
-            'parse': Xparse,
-            'sent_ner': [Xwords, Xner],
-            'sent_parse': [Xwords, Xparse],
-            'sent_parse_ner': [Xwords, Xparse, Xner]
-        }[args['--model']]
-        Yin = np.concatenate([Y, Xtypes], axis=1) if args['--mode'] == 'classification' else Y
-        return Xin, Yin, Xtypes
-
-    def run_epoch(split, train=False):
-        total = total_loss = 0
-        func = model.train if train else model.test
-        preds, targs = [], []
-        for X, Y in dataset.generate_batches(split, label=args['--mode']):
-            Xin, Yin, Xtypes = get_XY(X, Y)
-            loss = func(Xin, Yin)
-            if args['--mode'] == 'classification':
-                prob = model.predict(Xin, verbose=0)
-                prob *= typechecker.get_valid_cpu(Xtypes[:, 0], Xtypes[:, 1])
-                pred = prob.argmax(axis=1)
-                targs.append(Y.argmax(axis=1))
-            else:
-                pred = model.predict(Xin, verbose=0).flatten() > 0.5
-                valid = typechecker.get_valid_cpu(Xtypes[:, 0], Xtypes[:, 1]).sum(axis=1) > 0
-                pred = pred * valid
-                targs.append(Y.flatten())
-            preds.append(pred)
-            total_loss += loss
-            total += 1
-        preds = np.concatenate(preds).astype('int32')
-        targs = np.concatenate(targs).astype('int32')
-        # exclude no_relation when calculating f1
-        total_f1 = f1_score(targs, preds, average='micro', labels=f1_labels) if args['--mode'] == 'classification' else f1_score(targs, preds)
-        total_loss /= float(total)
-        return total_f1, total_loss, preds, targs
-
-    log = open('train.log', 'wb')
-    max_epoch = int(args['--epoch'])+1
-    for epoch in xrange(max_epoch):
-        train_f1, train_loss, preds, targs = run_epoch('train', train=True)
-        dev_f1, dev_loss, preds, targs = run_epoch('dev', train=False)
-
-        if (max_epoch < 5 or epoch > 5) and dev_f1 > best_f1:
-            best_f1 = dev_f1
-            best_weights = model.get_weights()
-            with open('best_weights.pkl', 'wb') as f:
-                pkl.dump(best_weights, f, protocol=pkl.HIGHEST_PROTOCOL)
-
-        d = json.dumps({'epoch': epoch, 'dev_loss': dev_loss, 'dev_f1': dev_f1,
-                        'train_loss': train_loss, 'train_f1': train_f1}, sort_keys=True)
-        print d
-        log.write(d + "\n")
-
-        if epoch % 100 == 0:
-            np.save('weights.' + str(epoch), model.get_weights())
-    log.close()
-
-    model.set_weights(best_weights)
-    test_f1, test_loss, preds, targs = run_epoch('test', train=False)
-
-    d = {
-        'test_loss': test_loss,
-        'test_f1': test_f1,
-        'dev_f1': best_f1,
-        'test_acc': accuracy_score(targs, preds),
-        }
-    if args['--mode'] == 'classification':
-        d.update({
-            'test_recall': recall_score(targs, preds, average='micro', labels=f1_labels),
-            'test_precision': precision_score(targs, preds, average='micro', labels=f1_labels),
-        })
-    else:
-        d['test_f1'] = f1_score(targs, preds, labels=f1_labels)
-    with open('test.json', 'wb') as f:
-        json.dump(d, f)
-    with open('test.pkl', 'wb') as f:
-        pkl.dump({'pred': preds, 'targ': targs}, f, pkl.HIGHEST_PROTOCOL)
-    pprint(d)
-
-    with open('model.weights.pkl', 'wb') as f:
-        pkl.dump(best_weights, f, protocol=pkl.HIGHEST_PROTOCOL)
+    model.save_weights(os.path.join(todir, 'best_weights'), overwrite=True)
+    with open(os.path.join(todir, 'best_scores.json'), 'wb') as f:
+        json.dump(best_scores, f, sort_keys=True)

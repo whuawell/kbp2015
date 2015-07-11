@@ -1,8 +1,10 @@
 __author__ = 'victor'
 
 import unittest
-from adaptors import *
+from data.adaptors import *
 import csv
+import os
+mydir = os.path.dirname(os.path.abspath(__file__))
 
 class TestAdaptor(object):
 
@@ -44,7 +46,7 @@ class TestAdaptor(object):
 class TestSupervised(unittest.TestCase, TestAdaptor):
 
     def setUp(self):
-        self.file = 'raw/supervision.csv'
+        self.file = os.path.join(mydir, '..', 'data', 'raw', 'supervision.csv')
 
         with open(self.file) as f:
             reader = csv.reader(f)
@@ -91,7 +93,7 @@ class TestSupervised(unittest.TestCase, TestAdaptor):
 class TestKBPTest(unittest.TestCase, TestAdaptor):
 
     def setUp(self):
-        self.file = 'raw/test.sample.tsv'
+        self.file = os.path.join(mydir, '..', 'data', 'raw', 'test.sample.tsv')
 
         with open(self.file) as f:
             reader = csv.reader(f, delimiter="\t")
@@ -136,8 +138,7 @@ class TestKBPTest(unittest.TestCase, TestAdaptor):
 class TestKBPEvaluationTest(unittest.TestCase, TestAdaptor):
 
     def setUp(self):
-        self.file = 'raw/evaluation.tsv'
-
+        self.file = os.path.join(mydir, '..', 'data', 'raw', 'evaluation.tsv')
         with open(self.file) as f:
             reader = csv.reader(f, delimiter="\t")
             self.raw = reader.next()

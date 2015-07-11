@@ -75,13 +75,15 @@ class Split(object):
     ignore_relations = {'org:website', 'org:date_founded'}
 
     def __init__(self, generator, featurizer, add=False, handle_no_path='short'):
+        self.featurizer = featurizer
         self.ex = []
         self.length_map = {}
+        num_examples = 0
         for ex in generator:
             if ex.relation in self.ignore_relations:
                 continue
             try:
-                feat = featurizer.featurize(ex, add=add)
+                feat = self.featurizer.featurize(ex, add=add)
             except NoPathException as e:
                 if handle_no_path == 'ignore':
                     continue
@@ -99,6 +101,8 @@ class Split(object):
                 print >> sys.stderr, pformat(ex)
                 raise
 
+            feat.id = num_examples
+            num_examples += 1
             if feat.length not in self.length_map:
                 self.length_map[feat.length] = []
             self.length_map[feat.length] += [feat]
@@ -108,10 +112,13 @@ class Split(object):
         np.random.shuffle(lengths)
         for length in lengths:
             examples = self.length_map[length]
-            X = np.array([e.sequence for e in examples])
-            Y = np.array([e.relation for e in examples])
+            ids = np.array([e.id for e in examples])
             for i in xrange(0, len(examples), batch_size):
-                yield X[i:i+batch_size], Y[i:i+batch_size]
+                end = min(i+batch_size, len(examples))
+                Xbatch, Ybatch, types = self.featurizer.to_matrix(examples[i:end])
+                if not len(types):
+                    continue
+                yield ids[i:end], Xbatch, Ybatch, types
 
 
 class Dataset(object):

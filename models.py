@@ -1,6 +1,6 @@
 __author__ = 'victor'
 
-from keras.models import Sequential
+from keras.models import Graph
 from keras.layers.core import *
 from keras.layers.embeddings import Embedding
 from keras.layers.recurrent import *
@@ -10,144 +10,79 @@ from keras.optimizers import *
 from keras.regularizers import *
 
 import os
+import json
 import numpy as np
+from data.pretrain import Senna
 
 RNN = LSTM
 
-def load_pretrained(word2emb, vocab, W):
-    for i, word in enumerate(vocab['word'].index2word):
-        if word in word2emb:
-            W[i] = word2emb[word]
-    return W
 
-def ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
-    net = Sequential()
-    edge_emb = Embedding(len(vocab['ner']), emb_dim, W_constraint=UnitNorm())
-    net.add(edge_emb)
-    n_in = emb_dim
-    for n_out in hidden[:-1]:
-        net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
-        if dropout:
-            net.add(Dropout(dropout))
-        net.add(Activation(activation))
-        n_in = n_out
-    n_out = hidden[-1]
-    net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
 
-    return net, n_out
+def get_model(config, vocab, typechecker):
+    if config.model == 'concat':
+        graph, out = concatenated(vocab, config)
+    elif config.model == 'seq':
+        graph, out = sequence(vocab, config)
+    else:
+        raise Exception("unknown model type %s" % config.model)
+    graph.compile('rmsprop', {out: typechecker.filtered_crossentropy})
+    return graph
 
-def parse(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
-    net = Sequential()
-    edge_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=UnitNorm())
-    net.add(edge_emb)
-    n_in = emb_dim
-    for n_out in hidden[:-1]:
-        net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
-        if dropout:
-            net.add(Dropout(dropout))
-        net.add(Activation(activation))
-        n_in = n_out
-    n_out = hidden[-1]
-    net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
-
-    return net, n_out
-
-def sent(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
-    net = Sequential()
+def pretrained_word_emb(vocab, emb_dim):
+    word2emb = vocab['word'].load_word2emb()
     word_emb = Embedding(len(vocab['word']), emb_dim)
     W = word_emb.get_weights()[0]
-    W = load_pretrained(word2emb, vocab, W)
+    for i, word in enumerate(word2emb.keys()):
+        W[i] = word2emb[word]
     word_emb.set_weights([W])
-    word_emb.constraints = word_emb.params = word_emb.regularizers = []
-    net.add(word_emb)
-    n_in = emb_dim
-    for n_out in hidden[:-1]:
-        net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
-        if dropout:
-            net.add(Dropout(dropout))
-        net.add(Activation(activation))
-        n_in = n_out
-    n_out = hidden[-1]
-    net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
+    return word_emb
 
-    return net, n_out
+def concatenated(vocab, config):
+    graph = Graph()
+    graph.add_input(name='word_input', ndim=2, dtype='int')
+    graph.add_input(name='ner_input', ndim=2, dtype='int')
+    graph.add_input(name='dep_input', ndim=2, dtype='int')
+    graph.add_input(name='pos_input', ndim=2, dtype='int')
+    graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
+    graph.add_node(Embedding(len(vocab['ner']), config.emb_dim), name='ner_emb', input='ner_input')
+    graph.add_node(Embedding(len(vocab['dep']), config.emb_dim), name='dep_emb', input='dep_input')
+    graph.add_node(Embedding(len(vocab['pos']), config.emb_dim), name='pos_emb', input='pos_input')
 
-def sent_ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
-    word_emb = Embedding(len(vocab['word']), emb_dim)
-    W = word_emb.get_weights()[0]
-    W = load_pretrained(word2emb, vocab, W)
-    word_emb.set_weights([W])
-    # word_emb.constraints = word_emb.params = word_emb.regularizers = []
-    word_net = Sequential()
-    word_net.add(word_emb)
-    ner_emb = Embedding(len(vocab['ner']), emb_dim, W_constraint=UnitNorm())
-    ner_net = Sequential()
-    ner_net.add(ner_emb)
-    net = Sequential()
-    net.add(Merge([word_net, ner_net], mode='concat'))
-    n_in = emb_dim * 2
-    for n_out in hidden[:-1]:
-        net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
-        if dropout:
-            net.add(Dropout(dropout))
-        net.add(Activation(activation))
-        n_in = n_out
-    n_out = hidden[-1]
-    net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
+    n_in = 4 * config.emb_dim
+    n_out = config.hidden[0]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=True),
+        name='RNN1', inputs=['word_emb', 'ner_emb', 'pos_emb', 'dep_emb'], merge_mode='concat')
+    graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
+    n_in = n_out
+    n_out = config.hidden[1]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
+        name='RNN2', input='drop1')
+    graph.add_node(Dropout(config.dropout), 'drop2', input='RNN2')
+    graph.add_node(Dense(n_out, len(vocab['rel'])), 'dense2', input='drop2')
+    graph.add_output(name='p_relation', input='dense2')
 
-    return net, n_out
+    return graph, 'p_relation'
 
-def sent_parse(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
-    word_emb = Embedding(len(vocab['word']), emb_dim)
-    W = word_emb.get_weights()[0]
-    W = load_pretrained(word2emb, vocab, W)
-    word_emb.set_weights([W])
-    # word_emb.constraints = word_emb.params = word_emb.regularizers = []
-    word_net = Sequential()
-    word_net.add(word_emb)
-    dep_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=UnitNorm())
-    dep_net = Sequential()
-    dep_net.add(dep_emb)
-    net = Sequential()
-    net.add(Merge([word_net, dep_net], mode='concat'))
-    n_in = emb_dim * 2
-    for n_out in hidden[:-1]:
-        net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
-        if dropout:
-            net.add(Dropout(dropout))
-        net.add(Activation(activation))
-        n_in = n_out
-    n_out = hidden[-1]
-    net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
+def sequence(vocab, config):
+    graph = Graph()
+    graph.add_input(name='word_input', ndim=2, dtype='int')
+    graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
 
-    return net, n_out
+    n_in = config.emb_dim
+    n_out = config.hidden[0]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=True),
+        name='RNN1', input='word_emb')
+    graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
+    n_in = n_out
+    n_out = config.hidden[1]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
+        name='RNN2', input='drop1')
+    graph.add_node(Dropout(config.dropout), 'drop2', input='RNN2')
+    graph.add_node(Dense(n_out, len(vocab['rel'])), 'dense2', input='drop2')
+    graph.add_output(name='p_relation', input='dense2')
 
-def sent_parse_ner(vocab, word2emb, emb_dim, hidden=(300,), dropout=0.5, activation='tanh', truncate_gradient=-1, reg=1e-3):
-    word_emb = Embedding(len(vocab['word']), emb_dim)
-    W = word_emb.get_weights()[0]
-    W = load_pretrained(word2emb, vocab, W)
-    word_emb.set_weights([W])
-    word_emb.constraints = word_emb.params = word_emb.regularizers = []
-    word_net = Sequential()
-    word_net.add(word_emb)
-    dep_emb = Embedding(len(vocab['dep']), emb_dim, W_constraint=UnitNorm())
-    dep_net = Sequential()
-    dep_net.add(dep_emb)
-    ner_emb = Embedding(len(vocab['ner']), emb_dim, W_constraint=UnitNorm())
-    ner_net = Sequential()
-    ner_net.add(ner_emb)
-    net = Sequential()
-    net.add(Merge([word_net, dep_net, ner_net], mode='concat'))
-    if dropout:
-        net.add(Dropout(dropout))
-    n_in = emb_dim * 3
-    for n_out in hidden[:-1]:
-        net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=True))
-        if dropout:
-            net.add(Dropout(dropout))
-        net.add(Activation(activation))
-        n_in = n_out
-    n_out = hidden[-1]
-    net.add(RNN(n_in, n_out, truncate_gradient=truncate_gradient, return_sequences=False))
-
-    return net, n_out
+    return graph, 'p_relation'
