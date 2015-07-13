@@ -24,7 +24,7 @@ def get_model(config, vocab, typechecker):
         'single_conv': single_conv,
     }[config.model]
     graph, out = fetch(vocab, config)
-    graph.compile('rmsprop', {out: typechecker.filtered_crossentropy})
+    graph.compile(rmsprop(lr=config.lr, clipnorm=10.), {out: typechecker.filtered_crossentropy})
     return graph
 
 def pretrained_word_emb(vocab, emb_dim):
@@ -77,6 +77,7 @@ def single(vocab, config):
         RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=True),
         name='RNN1', input='drop0')
     graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
+
     n_in = n_out
     n_out = config.hidden[1]
     graph.add_node(

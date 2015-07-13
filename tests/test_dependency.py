@@ -49,7 +49,7 @@ class TestDependencyParse(unittest.TestCase):
         shortest = parse.get_path_from_parse(ex.subject_begin, ex.subject_end, ex.object_begin, ex.object_end)
 
         self.assertEqual(shortest, [
-            [ex.words.index('Berkeley'), ex.words.index('Baker'), 'nmod:in_from'],
+            [ex.words.index('berkeley'), ex.words.index('baker'), 'nmod:in_from'],
         ])
 
 if __name__ == '__main__':

@@ -25,6 +25,7 @@ class DatasetAdaptor(object):
     def convert_types(self, ex):
         for e in ['lemmas', 'words']:
             ex[e] = self.parse_array(ex[e], True)
+            ex[e] = [w.lower() for w in ex[e]]
         for e in ['pos', 'ner']:
             ex[e] = self.parse_array(ex[e])
         for e in ['subject_begin', 'subject_end', 'object_begin', 'object_end']:

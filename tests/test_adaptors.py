@@ -10,7 +10,11 @@ class TestAdaptor(object):
 
     def test_words(self):
         ex = self.adaptor.to_example(self.raw)
-        self.assertEqual(ex.words, self.words)
+        self.assertEqual(ex.words, [w.lower() for w in  self.words])
+
+    def test_lemmas(self):
+        ex = self.adaptor.to_example(self.raw)
+        self.assertEqual(ex.lemmas, [w.lower() for w in  self.lemmas])
 
     def test_ner(self):
         ex = self.adaptor.to_example(self.raw)
@@ -22,14 +26,14 @@ class TestAdaptor(object):
 
     def test_subject(self):
         ex = self.adaptor.to_example(self.raw)
-        self.assertEqual(ex.subject, self.subject)
+        self.assertEqual(ex.subject, self.subject.lower())
         self.assertEqual(ex.subject_ner, self.subject_ner)
         self.assertEqual(ex.subject_begin, self.subject_begin)
         self.assertEqual(ex.subject_end, self.subject_end)
 
     def test_object(self):
         ex = self.adaptor.to_example(self.raw)
-        self.assertEqual(ex.object, self.object)
+        self.assertEqual(ex.object, self.object.lower())
         self.assertEqual(ex.object_ner, self.object_ner)
         self.assertEqual(ex.object_begin, self.object_begin)
         self.assertEqual(ex.object_end, self.object_end)
