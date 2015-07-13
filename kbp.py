@@ -1,74 +1,34 @@
-#!/usr/bin/env python
 #!/u/nlp/packages/anaconda/bin/safepython
-import cPickle as pkl
-import numpy as np
-import json
 import os
-import signal
-import fileinput
+mydir = os.path.dirname(os.path.abspath(__file__))
+import numpy as np
+from utils import np_softmax
 from pprint import pprint
-from train import get_model_from_arg
+from configs.config import Config
+from data.dataset import Dataset, Split
+from data.adaptors import *
+from data.typecheck import TypeCheckAdaptor
+from models import get_model
 
-
-from data.dataset import AnnotatedData, ExampleAdaptor
-from text.dataset import Example
-from train import *
-d = AnnotatedData.load('data/senna')
-typechecker = TypeCheckAdaptor(d.vocab)
-
-def load_model(folder):
-    with open(os.path.join(folder, 'args.json')) as f:
-        args = json.load(f)
-    with open(os.path.join(folder, 'model.weights.pkl')) as f:
-        weights = pkl.load(f)
-    model = get_model_from_arg(args, d, typechecker)
-    model.set_weights(weights)
-    return model
-
-mydir = os.path.abspath(os.path.dirname(__file__))
-filter_dir = os.path.join(mydir, 'deploy', 'filter')
-classifier_dir = os.path.join(mydir, 'deploy', 'classifier')
 
 if __name__ == '__main__':
-    # hack: disable keyboard interrupt (something funky with greenplum?)
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    # filter_model = load_model(filter_dir)
-    # classifier = load_model(classifier_dir)
-    adaptor = ExampleAdaptor(d.vocab)
+    root = os.path.join(mydir, 'experiment', 'deploy')
+    config = Config.load(os.path.join(root, 'config.json'))
+    dataset = Dataset.load(config.data)
+    typechecker = TypeCheckAdaptor(os.path.join(mydir, 'data', 'raw', 'typecheck.csv'), dataset.featurizer.vocab)
 
-    headers = ['gloss', 'dependency', 'dep_extra', 'dep_malt', 'words', 'lemmas', 'pos', 'ner', 'subject_id',
-               'subject_entity', 'subject_link_score', 'subject_ner', 'object_id', 'object_entity', 'object_link_score',
-               'object_ner', 'subject_begin', 'subject_end', 'object_begin', 'object_end']
+    model = get_model(config, dataset.featurizer.vocab, typechecker)
+    model.load_weights(os.path.join(root, 'best_weights'))
 
-    def hack_word_list(words):
-        words = words[1:-1].replace('","', 'COMMA').split(',')
-        for i, word in enumerate(words):
-            if word == 'COMMA':
-                words[i] = ','
-        return words
-
-    for line in fileinput.input():
-        line = line.strip()
-        fields = line.split("\t")
-        row = dict(zip(headers, fields))
-
-        # hack the data formatting issues away
-        row['dependency'] = row['dependency'].replace("\\n", "\n").replace("\\t", "\t")
-
-        ex = Example(**row)
-        s_begin, s_end, o_begin, o_end = [int(row[k]) for k in ['subject_begin', 'subject_end', 'object_begin', 'object_end']]
-
-        convert = adaptor.convert(ex, unk='UNKNOWN', tokenize=hack_word_list)
-        Xin = [convert.words, convert.parse, convert.ner]
-        Xin = [np.array(x).reshape((1, -1)) for x in Xin]
-        types = np.array([convert.subject_ner, convert.object_ner]).reshape((1, -1))
-
-        # pred = classifier.predict(Xin, verbose=0)
-        # pred *= typechecker.get_valid_cpu(types[:, 0], types[:, 1])
-        # rel = pred.argmax(axis=1)
-        #
-        # relation = d.vocab['rel'].index2word[rel[0]]
-        # if relation == 'no_relation':
-        #     continue
-        # confidence = pred[rel]
-        # print "\t".join([str(s) for s in [row['subject_id'], relation, row['object_id'], confidence]])
+    dev_generator = KBPDataAdaptor().online_to_examples(disable_interrupts=True)
+    for ex in dev_generator:
+        try:
+            feat = dataset.featurizer.featurize(ex, add=False)
+        except Exception as e:
+            continue
+        X, Y, types = dataset.featurizer.to_matrix([feat])
+        prob = model.predict(X, verbose=0)['p_relation']
+        prob *= typechecker.get_valid_cpu(types[:, 0], types[:, 1])
+        pred = prob.argmax(axis=1)
+        confidence = np_softmax(prob.flatten())[pred[0]]
+        print "\t".join([str(s) for s in [ex.subject_id, pred[0], ex.object_id, confidence]])
