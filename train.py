@@ -71,7 +71,7 @@ class Trainer(object):
             'loss': total_loss / float(total),
             }
         if return_pred:
-            ret.update({'preds': preds.tolist(), 'targs': targs.tolist()})
+            ret.update({'ids': ids.tolist(), 'preds': preds.tolist(), 'targs': targs.tolist()})
         return ret
 
     def run_epoch_stochastic(self, split, train=False, batch_size=128, return_pred=False, losses=None):
@@ -114,12 +114,12 @@ class Trainer(object):
             'loss': total_loss / float(total),
             }
         if return_pred:
-            ret.update({'preds': preds.tolist(), 'targs': targs.tolist()})
+            ret.update({'ids': ids.tolist(), 'preds': preds.tolist(), 'targs': targs.tolist()})
         return ret
 
     def train(self, train_split, dev_split=None, max_epoch=150):
         best_scores, best_weights, dev_scores = {}, None, None
-        compare = 'f1'
+        compare = 'precision'
         best_scores[compare] = 0.
 
         losses = np.ones(train_split.num_examples) * 100.

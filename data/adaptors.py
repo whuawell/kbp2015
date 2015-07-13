@@ -5,7 +5,8 @@ import csv
 class DatasetAdaptor(object):
 
     keep = ['dependency', 'words', 'lemmas', 'pos', 'ner', 'subject_begin', 'subject_end', 'subject',
-            'subject_ner', 'object_begin', 'object_end', 'object', 'object_ner', 'relation']
+            'subject_ner', 'object_begin', 'object_end', 'object', 'object_ner', 'relation',
+            'subject_id', 'object_id']
 
     def parse_dependency(self, dependency, ex, use_lemma=True):
         deps = []
@@ -61,7 +62,6 @@ class SupervisedDataAdaptor(DatasetAdaptor):
             ]
 
     def to_example(self, row):
-
         d = dict(zip(self.headers, row))
         assert len(d) == len(self.headers), "could not convert row to example %s\n%s" % (row, d)
         ex = Example(**d)
@@ -100,6 +100,17 @@ class KBPDataAdaptor(DatasetAdaptor):
         with open(fname) as f:
             for row in f:
                 yield self.to_example(row.split("\t"))
+
+    def online_to_examples(self, disable_interrupts=False):
+        import sys
+        if disable_interrupts:
+            import signal
+            s = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        for line in sys.stdin:
+            row = line.split("\t")
+            if len(row) < 2:
+                break
+            yield self.to_example(row)
 
 
 class KBPEvaluationDataAdaptor(KBPDataAdaptor):

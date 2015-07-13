@@ -33,7 +33,7 @@ class Featurizer(object):
             'object_ner': self.vocab['ner'].get(ex.object_ner, add=add),
             'dependency': DependencyParse(ex.dependency, enhanced=True).get_path_from_parse(
                 ex.subject_begin, ex.subject_end, ex.object_begin, ex.object_end),
-            'orig': self,
+            'orig': ex,
         })
 
         if not feat.dependency: # no shortest path between entities
@@ -61,6 +61,10 @@ class SinglePathFeaturizer(Featurizer):
         ex.length = feat.length = len(sequence)
         return feat
 
+    def decode_sequence(self, ex):
+        sequence = [self.vocab['word'].index2word[w] for w in ex.sequence]
+        return sequence
+
     def to_matrix(self, examples):
         X = {'word_input': []}
         Y = {'p_relation': []}
@@ -70,7 +74,7 @@ class SinglePathFeaturizer(Featurizer):
             Y['p_relation'].append(ex.relation)
             types.append([ex.subject_ner, ex.object_ner])
         X['word_input'] = np.array(X['word_input'])
-        Y['p_relation'] = self.one_hot(np.array(Y['p_relation']))
+        Y['p_relation'] = [None] * len(Y['p_relation']) if None in Y['p_relation'] else self.one_hot(np.array(Y['p_relation']))
         # double check lengths
         for k, v in X.items():
             assert len(v) == len(Y['p_relation'])
@@ -109,6 +113,17 @@ class ConcatenatedFeaturizer(Featurizer):
         ex.length = feat.length = len(sequence)
         return feat
 
+    def decode_sequence(self, ex):
+        sequence = []
+        for word, ner, pos, arc in zip(ex.words, ex.ner, ex.pos, ex.arc):
+            sequence.append([
+                self.vocab['word'].index2word[word],
+                self.vocab['ner'].index2word[ner],
+                self.vocab['pos'].index2word[pos],
+                self.vocab['dep'].index2word[arc],
+            ])
+        return sequence
+
     def to_matrix(self, examples):
         X = {k: [] for k in ['word_input', 'ner_input', 'pos_input', 'dep_input']}
         Y = {'p_relation': []}
@@ -120,7 +135,7 @@ class ConcatenatedFeaturizer(Featurizer):
             X['dep_input'].append(ex.arc)
             Y['p_relation'].append(ex.relation)
             types.append([ex.subject_ner, ex.object_ner])
-        Y['p_relation'] = self.one_hot(np.array(Y['p_relation']))
+        Y['p_relation'] = [None] * len(Y['p_relation']) if None in Y['p_relation'] else self.one_hot(np.array(Y['p_relation']))
         # double check lengths
         for k, v in X.items():
             assert len(v) == len(Y['p_relation'])
