@@ -15,19 +15,20 @@ class Config(dict):
 
     def save(self, to_file):
         with open(to_file, 'wb') as f:
-            json.dump(self.__dict__, f, sort_keys=True)
+            json.dump(self.__dict__, f, sort_keys=True, indent=2)
 
     @classmethod
     def default(cls):
         return Config(**{
             'data': 'data/saves/supervision_evaluation',
-            'model': 'concat',
+            'model': 'single',
             'emb_dim': 50,
-            'hidden': (300,300),
+            'hidden': (512, 256),
             'dropout': 0.5,
             'activation': 'relu',
             'truncate_gradient': 50,
-            'reg': 1e-3,
+            'reg': 1e-4,
             'optim': 'rmsprop',
             'lr': 1e-2,
+            'max_epoch': 10,
         })

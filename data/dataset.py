@@ -1,11 +1,12 @@
 __author__ = 'victor'
 from collections import Counter
-import numpy as np
-import json
 import cPickle as pkl
+import numpy as np
 import sys
 from pprint import pformat
 import os
+from dependency import NoPathException
+from utils import np_softmax
 
 
 class Example(dict):
@@ -76,10 +77,21 @@ class Split(object):
 
     def __init__(self, generator, featurizer, add=False, handle_no_path='short'):
         self.featurizer = featurizer
-        self.ex = []
-        self.length_map = {}
-        num_examples = 0
+        self.examples = []
+        self.num_examples = 0
+
         for ex in generator:
+            def raise_error(ex):
+                print >> sys.stderr, 'Warning: Could not find path between entities in parse'
+                print >> sys.stderr, ' '.join(ex.words)
+                print >> sys.stderr, "subject %s (%s, %s) object %s (%s, %s)" % (
+                    ex.subject, ex.subject_begin, ex.subject_end,
+                    ex.object, ex.object_begin, ex.object_end)
+                print >> sys.stderr, 'dependency parse'
+                print >> sys.stderr, ex.dependency
+                print >> sys.stderr, "\n"
+                raise
+
             if ex.relation in self.ignore_relations:
                 continue
             try:
@@ -87,31 +99,55 @@ class Split(object):
             except NoPathException as e:
                 if handle_no_path == 'ignore':
                     continue
-                elif handle_no_path == 'raise':
-                    raise e
                 elif handle_no_path == 'short':
                     print >> sys.stderr, 'Warning: Could not find path between entities in parse'
                     print >> sys.stderr, ' '.join(ex.words)
+                    print >> sys.stderr, "subject %s (%s, %s) object %s (%s, %s)" % (
+                        ex.subject, ex.subject_begin, ex.subject_end,
+                        ex.object, ex.object_begin, ex.object_end)
+                    print >> sys.stderr, "\n"
+                    continue
                 else:
-                    print >> sys.stderr, 'Warning: Could not find path between entities in parse'
-                    print >> sys.stderr, ' '.join(ex.words)
-                    print >> sys.stderr, ex.dependency
+                    raise_error(ex)
             except:
-                print >> sys.stderr, "Error: Could not featurizer example"
-                print >> sys.stderr, pformat(ex)
-                raise
+                print >> sys.stderr, "Error: Could not featurize example"
+                raise_error(ex)
 
-            feat.id = num_examples
-            num_examples += 1
-            if feat.length not in self.length_map:
-                self.length_map[feat.length] = []
-            self.length_map[feat.length] += [feat]
+            feat.id = self.num_examples
+            feat.orig = ex
+            self.num_examples += 1
+            self.examples += [feat]
+
+    def __len__(self):
+        return self.num_examples
+
+    def remove_invalid_examples(self, typechecker):
+        invalids = [e for e in self.examples if not typechecker.get_valid(e.subject_ner, e.object_ner)]
+        self.examples = [e for e in self.examples if typechecker.get_valid(e.subject_ner, e.object_ner)]
+        return invalids
+
+    def get_length_map(self, examples):
+        length_map = {}
+        for ex in examples:
+            if ex.length not in length_map:
+                length_map[ex.length] = []
+            length_map[ex.length] += [ex]
+        return length_map
+
+    def get_label_map(self, examples):
+        label_map = {}
+        for ex in examples:
+            if ex.relation not in label_map:
+                label_map[ex.relation] = []
+            label_map[ex.relation] += [ex]
+        return label_map
 
     def batches(self, batch_size=128):
-        lengths = self.length_map.keys()
+        length_map = self.get_length_map(self.examples)
+        lengths = length_map.keys()
         np.random.shuffle(lengths)
         for length in lengths:
-            examples = self.length_map[length]
+            examples = length_map[length]
             ids = np.array([e.id for e in examples])
             for i in xrange(0, len(examples), batch_size):
                 end = min(i+batch_size, len(examples))
@@ -119,6 +155,23 @@ class Split(object):
                 if not len(types):
                     continue
                 yield ids[i:end], Xbatch, Ybatch, types
+
+    def stochastic_curriculum(self, losses):
+        p = np_softmax(losses)
+        ex = np.random.choice(self.examples, p=p)
+        Xbatch, Ybatch, types = self.featurizer.to_matrix([ex])
+        if not len(types):
+            raise Exception()
+        return [ex.id], Xbatch, Ybatch, types
+
+    def stochastic_curriculum_class_based(self):
+        label_map = self.get_label_map(self.examples)
+        label = np.random.choice(np.arange(len(self.featurizer.vocab['rel'])))
+        ex = np.random.choice(label_map[label])
+        Xbatch, Ybatch, types = self.featurizer.to_matrix([ex])
+        if not len(types):
+            raise Exception()
+        return [ex.id], Xbatch, Ybatch, types
 
 
 class Dataset(object):

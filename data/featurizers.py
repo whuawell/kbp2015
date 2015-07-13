@@ -24,10 +24,10 @@ class Featurizer(object):
         return ex.words[index]
 
     def featurize(self, ex, add=False):
-        if not ex.dependency:
+        if not ex.dependency: # no dependency parse
             raise NoPathException(str(ex))
 
-        return Example(**{
+        feat = Example(**{
             'relation': self.vocab['rel'].get(ex.relation, add=add) if ex.relation else None,
             'subject_ner': self.vocab['ner'].get(ex.subject_ner, add=add),
             'object_ner': self.vocab['ner'].get(ex.object_ner, add=add),
@@ -35,6 +35,10 @@ class Featurizer(object):
                 ex.subject_begin, ex.subject_end, ex.object_begin, ex.object_end),
             'orig': self,
         })
+
+        if not feat.dependency: # no shortest path between entities
+            raise NoPathException(str(ex))
+        return feat
 
     def one_hot(self, y):
         Y = np.zeros((y.size, len(self.vocab['rel'])))

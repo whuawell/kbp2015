@@ -4,6 +4,7 @@ from keras.models import Graph
 from keras.layers.core import *
 from keras.layers.embeddings import Embedding
 from keras.layers.recurrent import *
+from keras.layers.convolutional import *
 from keras.constraints import *
 from keras.objectives import *
 from keras.optimizers import *
@@ -16,15 +17,13 @@ from data.pretrain import Senna
 
 RNN = LSTM
 
-
-
 def get_model(config, vocab, typechecker):
-    if config.model == 'concat':
-        graph, out = concatenated(vocab, config)
-    elif config.model == 'seq':
-        graph, out = sequence(vocab, config)
-    else:
-        raise Exception("unknown model type %s" % config.model)
+    fetch = {
+        'concat': concatenated,
+        'single': single,
+        'single_conv': single_conv,
+    }[config.model]
+    graph, out = fetch(vocab, config)
     graph.compile('rmsprop', {out: typechecker.filtered_crossentropy})
     return graph
 
@@ -44,15 +43,39 @@ def concatenated(vocab, config):
     graph.add_input(name='dep_input', ndim=2, dtype='int')
     graph.add_input(name='pos_input', ndim=2, dtype='int')
     graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
-    graph.add_node(Embedding(len(vocab['ner']), config.emb_dim), name='ner_emb', input='ner_input')
-    graph.add_node(Embedding(len(vocab['dep']), config.emb_dim), name='dep_emb', input='dep_input')
-    graph.add_node(Embedding(len(vocab['pos']), config.emb_dim), name='pos_emb', input='pos_input')
+    graph.add_node(Embedding(len(vocab['ner']), config.emb_dim, W_constraint=UnitNorm()), name='ner_emb', input='ner_input')
+    graph.add_node(Embedding(len(vocab['dep']), config.emb_dim, W_constraint=UnitNorm()), name='dep_emb', input='dep_input')
+    graph.add_node(Embedding(len(vocab['pos']), config.emb_dim, W_constraint=UnitNorm()), name='pos_emb', input='pos_input')
+    graph.add_node(Dropout(config.dropout), 'drop0', inputs=['word_emb', 'ner_emb', 'pos_emb', 'dep_emb'], merge_mode='concat')
 
     n_in = 4 * config.emb_dim
     n_out = config.hidden[0]
     graph.add_node(
         RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=True),
-        name='RNN1', inputs=['word_emb', 'ner_emb', 'pos_emb', 'dep_emb'], merge_mode='concat')
+        name='RNN1', input='drop0')
+    graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
+    n_in = n_out
+    n_out = config.hidden[1]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
+        name='RNN2', input='drop1')
+    graph.add_node(Dropout(config.dropout), 'drop2', input='RNN2')
+    graph.add_node(Dense(n_out, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense2', input='drop2')
+    graph.add_output(name='p_relation', input='dense2')
+
+    return graph, 'p_relation'
+
+def single(vocab, config):
+    graph = Graph()
+    graph.add_input(name='word_input', ndim=2, dtype='int')
+    graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
+    graph.add_node(Dropout(config.dropout), 'drop0', input='word_emb')
+
+    n_in = config.emb_dim
+    n_out = config.hidden[0]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=True),
+        name='RNN1', input='drop0')
     graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
     n_in = n_out
     n_out = config.hidden[1]
@@ -65,24 +88,27 @@ def concatenated(vocab, config):
 
     return graph, 'p_relation'
 
-def sequence(vocab, config):
+def single_conv(vocab, config):
     graph = Graph()
     graph.add_input(name='word_input', ndim=2, dtype='int')
     graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
+    graph.add_node(Dropout(config.dropout), 'emb_out', input='word_emb')
 
     n_in = config.emb_dim
     n_out = config.hidden[0]
-    graph.add_node(
-        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=True),
-        name='RNN1', input='word_emb')
-    graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
-    n_in = n_out
+    pool = 2
+    graph.add_node(Convolution1D(n_in, n_out, 3, activation=config.activation), name='conv1', input='emb_out')
+    graph.add_node(Dropout(config.dropout), 'drop1', input='conv1')
+    graph.add_node(MaxPooling1D(pool_length=pool), 'conv_out', input='drop1')
+
+    n_in = n_out / pool
     n_out = config.hidden[1]
-    graph.add_node(
-        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
-        name='RNN2', input='drop1')
-    graph.add_node(Dropout(config.dropout), 'drop2', input='RNN2')
-    graph.add_node(Dense(n_out, len(vocab['rel'])), 'dense2', input='drop2')
-    graph.add_output(name='p_relation', input='dense2')
+    graph.add_node(RNN(n_in, n_out), 'rnn', input='conv_out')
+    graph.add_node(Dropout(config.dropout), 'rnn_out', input='rnn')
+
+    n_in = n_out
+    n_out = len(vocab['rel'])
+    graph.add_node(Dense(n_in, n_out), 'dense_out', input='rnn_out')
+    graph.add_output(name='p_relation', input='dense_out')
 
     return graph, 'p_relation'

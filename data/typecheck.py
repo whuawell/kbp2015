@@ -12,6 +12,10 @@ class TypeCheckAdaptor(object):
         self.vocab = vocab
         self.valid_types = self.load_valid_types(fname, vocab)
         self.valid = shared(self.valid_types)
+        self.class_weights = np.array([vocab['rel'].counts[r] for r in vocab['rel'].index2word], dtype='float32')
+        self.class_weights = self.class_weights.max() / self.class_weights
+        self.class_weights[vocab['rel']['no_relation']] *= 5.
+        self.class_weights = shared(self.class_weights)
 
     def get_valid(self, ner1, ner2):
         return self.valid[ner1, ner2]
@@ -26,7 +30,12 @@ class TypeCheckAdaptor(object):
         valid = self.get_valid(ner1, ner2)
         y_pred = T.nnet.softmax(valid * pred)
         y_targ = targ[:, :-2]
-        return categorical_crossentropy(y_targ, y_pred)
+
+        y_pred = T.clip(y_pred, 1e-7, 1.0 - 1e-7)
+        y_pred /= y_pred.sum(axis=-1, keepdims=True)
+        log_prob = y_targ * T.log(y_pred)
+        log_prob *= self.class_weights[np.newaxis, :]
+        return -T.sum(log_prob, axis=y_targ.ndim-1)
 
     def load_valid_types(self, fname, vocab):
         valid_types = np.zeros((len(vocab['ner']), len(vocab['ner']), len(vocab['rel'])), dtype='float32')
