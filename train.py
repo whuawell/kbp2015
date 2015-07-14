@@ -46,7 +46,6 @@ class Trainer(object):
         for idx, X, Y, types in split.batches(batch_size):
             X.update({k: np.concatenate([v, types], axis=1) for k, v in Y.items()})
             batch_end = time()
-            # pprint({k: v.shape for k, v in X.items()}) # useful for debugging
             loss = func(X)
             prob = self.model.predict(X, verbose=0)['p_relation']
             prob *= self.typechecker.get_valid_cpu(types[:, 0], types[:, 1])
@@ -161,11 +160,15 @@ if __name__ == '__main__':
         train_generator = SupervisedDataAdaptor().to_examples('data/raw/supervision.csv')
         dev_generator = KBPEvaluationDataAdaptor().to_examples('data/raw/evaluation.tsv')
         featurizer = ConcatenatedFeaturizer(word=Senna()) if 'concat' in config.model else SinglePathFeaturizer(word=Senna())
-
         dataset = Dataset.build(train_generator, dev_generator, featurizer)
         dataset.save(config.data)
     else:
         dataset = Dataset.load(config.data)
+    print 'using train split', dataset.train
+    print 'using dev split', dataset.dev
+    print 'using featurizer', dataset.featurizer
+    print 'using config'
+    pprint(config)
 
     name = os.path.join('experiments', args['<name>'])
     todir = os.path.join(mydir, name)
@@ -203,6 +206,7 @@ if __name__ == '__main__':
     with open(os.path.join(todir, 'best_scores.json'), 'wb') as f:
         del best_scores['preds']
         del best_scores['targs']
+        del best_scores['ids']
         json.dump(best_scores, f, sort_keys=True)
     print 'best scores'
     pprint(best_scores)

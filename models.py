@@ -24,7 +24,7 @@ def get_model(config, vocab, typechecker):
         'single_conv': single_conv,
     }[config.model]
     graph, out = fetch(vocab, config)
-    graph.compile(rmsprop(lr=config.lr, clipnorm=10.), {out: typechecker.filtered_crossentropy})
+    graph.compile(rmsprop(lr=config.lr, clipnorm=5.), {out: typechecker.filtered_crossentropy})
     return graph
 
 def pretrained_word_emb(vocab, emb_dim):

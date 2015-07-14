@@ -8,7 +8,7 @@ class DatasetAdaptor(object):
             'subject_ner', 'object_begin', 'object_end', 'object', 'object_ner', 'relation',
             'subject_id', 'object_id']
 
-    def parse_dependency(self, dependency, ex, use_lemma=True):
+    def parse_dependency(self, dependency, ex, use_lemma=False):
         deps = []
         words = ex.lemmas if use_lemma else ex.words
         for line in dependency.split("\n"):
