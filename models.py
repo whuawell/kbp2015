@@ -15,17 +15,19 @@ import json
 import numpy as np
 from data.pretrain import Senna
 
-RNN = LSTM
 
 def get_model(config, vocab, typechecker):
     fetch = {
         'concat': concatenated,
         'single': single,
         'single_conv': single_conv,
-    }[config.model]
+    }[config.rnn]
     graph, out = fetch(vocab, config)
     graph.compile(rmsprop(lr=config.lr, clipnorm=5.), {out: typechecker.filtered_crossentropy})
     return graph
+
+def get_rnn(config):
+    return {'lstm': LSTM, 'gru': GRU, 'mut1': JZS1, 'mut2': JZS2, 'mut3': JZS3}[config.model]
 
 def pretrained_word_emb(vocab, emb_dim):
     word2emb = vocab['word'].load_word2emb()
@@ -37,6 +39,8 @@ def pretrained_word_emb(vocab, emb_dim):
     return word_emb
 
 def concatenated(vocab, config):
+    RNN = get_rnn(config)
+
     graph = Graph()
     graph.add_input(name='word_input', ndim=2, dtype='int')
     graph.add_input(name='ner_input', ndim=2, dtype='int')
@@ -66,6 +70,8 @@ def concatenated(vocab, config):
     return graph, 'p_relation'
 
 def single(vocab, config):
+    RNN = get_rnn(config)
+
     graph = Graph()
     graph.add_input(name='word_input', ndim=2, dtype='int')
     graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
@@ -90,6 +96,8 @@ def single(vocab, config):
     return graph, 'p_relation'
 
 def single_conv(vocab, config):
+    RNN = get_rnn(config)
+
     graph = Graph()
     graph.add_input(name='word_input', ndim=2, dtype='int')
     graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')

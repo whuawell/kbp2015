@@ -73,60 +73,15 @@ class Trainer(object):
             ret.update({'ids': ids.tolist(), 'preds': preds.tolist(), 'targs': targs.tolist()})
         return ret
 
-    def run_epoch_stochastic(self, split, train=False, batch_size=128, return_pred=False, losses=None):
-        if not train:
-            return self.run_epoch(split, train, batch_size, return_pred)
-
-        total = total_loss = 0
-        ids, preds, targs = [], [], []
-        prog = Progbar(split.num_examples)
-        for i in xrange(split.num_examples):
-            if losses is None:
-                idx, X, Y, types = split.stochastic_curriculum_class_based()
-            else:
-                idx, X, Y, types = split.stochastic_curriculum(losses)
-            X.update({k: np.concatenate([v, types], axis=1) for k, v in Y.items()})
-            batch_end = time()
-            loss = self.model.train_on_batch(X)
-            if losses is not None:
-                losses[i] = loss
-            prob = self.model.predict(X, verbose=0)['p_relation']
-            prob *= self.typechecker.get_valid_cpu(types[:, 0], types[:, 1])
-            pred = prob.argmax(axis=1)
-
-            targ = Y['p_relation'].argmax(axis=1)
-            ids.append(idx)
-            targs.append(targ)
-            preds.append(pred)
-            total_loss += loss
-            total += 1
-            prog.add(len(idx), values=[('loss', loss), ('acc', np.mean(pred==targ))])
-        preds = np.concatenate(preds).astype('int32')
-        targs = np.concatenate(targs).astype('int32')
-        ids = np.concatenate(ids).astype('int32')
-
-        ret = {
-            'f1': f1_score(targs, preds, average='micro', labels=self.labels),
-            'precision': precision_score(targs, preds, average='micro', labels=self.labels),
-            'recall': recall_score(targs, preds, average='micro', labels=self.labels),
-            'accuracy': accuracy_score(targs, preds),
-            'loss': total_loss / float(total),
-            }
-        if return_pred:
-            ret.update({'ids': ids.tolist(), 'preds': preds.tolist(), 'targs': targs.tolist()})
-        return ret
-
     def train(self, train_split, dev_split=None, max_epoch=150):
         best_scores, best_weights, dev_scores = {}, None, None
         compare = 'precision'
         best_scores[compare] = 0.
 
-        losses = np.ones(train_split.num_examples) * 100.
         for epoch in xrange(max_epoch+1):
             start = time()
             print 'starting epoch', epoch
             print 'training...'
-            # train_result = self.run_epoch_stochastic(train_split, True, losses=losses)
             train_result = self.run_epoch(train_split, True)
             if dev_split:
                 print 'evaluating...'

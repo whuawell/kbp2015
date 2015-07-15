@@ -20,7 +20,8 @@ class Config(dict):
     @classmethod
     def default(cls):
         return Config(**{
-            'data': 'data/saves/supervision_evaluation',
+            'rnn': 'lstm',
+            'data': 'data/saves/supervision_evaluation_single',
             'model': 'single',
             'emb_dim': 50,
             'hidden': (512, 512),

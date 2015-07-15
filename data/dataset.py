@@ -156,23 +156,6 @@ class Split(object):
                     continue
                 yield ids[i:end], Xbatch, Ybatch, types
 
-    def stochastic_curriculum(self, losses):
-        p = np_softmax(losses)
-        ex = np.random.choice(self.examples, p=p)
-        Xbatch, Ybatch, types = self.featurizer.to_matrix([ex])
-        if not len(types):
-            raise Exception()
-        return [ex.id], Xbatch, Ybatch, types
-
-    def stochastic_curriculum_class_based(self):
-        label_map = self.get_label_map(self.examples)
-        label = np.random.choice(np.arange(len(self.featurizer.vocab['rel'])))
-        ex = np.random.choice(label_map[label])
-        Xbatch, Ybatch, types = self.featurizer.to_matrix([ex])
-        if not len(types):
-            raise Exception()
-        return [ex.id], Xbatch, Ybatch, types
-
 
 class Dataset(object):
 
