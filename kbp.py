@@ -1,5 +1,5 @@
-#!/usr/bin/env python
 #!/u/nlp/packages/anaconda/bin/safepython
+#!/usr/bin/env python
 import os
 mydir = os.path.dirname(os.path.abspath(__file__))
 import numpy as np
@@ -45,9 +45,10 @@ if __name__ == '__main__':
 
     dev_generator = KBPDataAdaptor().online_to_examples(disable_interrupts='victor'!=os.environ['USER'])
     cache = Cache()
-    max_cache_size = 1024
+    max_cache_size = 2**15
     log = open(os.path.join(mydir, 'kbp.log'), 'wb')
     for i, ex in enumerate(dev_generator):
+        log.write(str(i) + "\n")
         try:
             feat = dataset.featurizer.featurize(ex, add=False)
         except Exception as e:
@@ -62,7 +63,8 @@ if __name__ == '__main__':
             pred = prob.argmax(axis=1)
             confidence = np_softmax(prob)[np.arange(len(pred)), pred]
             for ex, rel, conf in zip(cache.examples, pred, confidence):
+                if rel == dataset.featurizer.vocab['rel']['no_relation']:
+                    continue
                 print "\t".join([str(s) for s in [ex.orig.subject_id, dataset.featurizer.vocab['rel'].index2word[rel], ex.orig.object_id, conf]])
         cache.examples = []
-        log.write(str(i) + "\n")
 

@@ -4,7 +4,7 @@
 Usage: pred.py <model_dir> [--evaluation=<DATA>] [--debug]
 
 Options:
-    --evaluation=<DATA>     [default: eval]
+    --evaluation=<DATA>     [default: kbp_eval]
 
 """
 import os
