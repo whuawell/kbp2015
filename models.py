@@ -21,13 +21,13 @@ def get_model(config, vocab, typechecker):
         'concat': concatenated,
         'single': single,
         'single_conv': single_conv,
-    }[config.rnn]
+    }[config.model]
     graph, out = fetch(vocab, config)
     graph.compile(rmsprop(lr=config.lr, clipnorm=5.), {out: typechecker.filtered_crossentropy})
     return graph
 
 def get_rnn(config):
-    return {'lstm': LSTM, 'gru': GRU, 'mut1': JZS1, 'mut2': JZS2, 'mut3': JZS3}[config.model]
+    return {'lstm': LSTM, 'gru': GRU, 'mut1': JZS1, 'mut2': JZS2, 'mut3': JZS3}[config.rnn]
 
 def pretrained_word_emb(vocab, emb_dim):
     word2emb = vocab['word'].load_word2emb()
