@@ -41,3 +41,49 @@ def plot_histogram(labels, counts, title='Relation Histogram'):
     ax.set_ylabel('counts')
     return fig
 
+from collections import OrderedDict
+from tabulate import tabulate
+
+def parse_sklearn_report(str_report):
+    report = OrderedDict()
+    lines = str_report.splitlines()[2:-2] # first two lines are headers, last two lines are averages
+    for line in lines:
+        #                         no_relation       0.86      0.34      0.49      6191
+        relation, precision, recall, f1, support = line.split()
+        precision, recall, f1 = ["{:.2%}".format(float(e)) for e in [precision, recall, f1]]
+        report[relation] = (precision, recall, f1, support)
+    return report
+
+def parse_gabor_report(str_report):
+    report = OrderedDict()
+    for line in str_report.splitlines():
+        # [org:number_of_employees/members]  #: 9  P: 100.00%  R: 0.00%  F1: 0.00%
+        relation, _, support, _, precision, _, recall, _, f1 = line.split()
+        report[relation.strip('[]')] = (precision, recall, f1, support)
+    return report
+
+def combine_report(report, gabor, train_count):
+    header = [
+        'relation', 'nn_precision', 'nn_recall', 'nn_f1', 'nn_support',
+        'sup_precision', 'sup_recall', 'sup_f1', 'sup_support',
+        'train_support'
+    ]
+    table = []
+    for relation in report.keys():
+        precision, recall, f1, support = report[relation]
+        g_precision, g_recall, g_f1, g_support = gabor[relation] if relation in gabor else 4 * ['N/A']
+        row = [relation, precision, recall, f1, support, g_precision, g_recall, g_f1, g_support, train_count[relation]]
+        table += [row]
+
+    return tabulate(table, headers=header)
+
+def retrieve_wrong_examples(examples, ids, preds, targs, vocab):
+    examples_by_ids = {e.id:e for e in examples}
+    wrongs = []
+    for idx, pred, targ in zip(ids, preds, targs):
+        if pred != targ:
+            ex = examples_by_ids[idx]
+            ex.pred = vocab.index2word[pred]
+            ex.targ = vocab.index2word[targ]
+            wrongs += [ex]
+    return wrongs

@@ -47,6 +47,20 @@ if __name__ == '__main__':
     cache = Cache()
     max_cache_size = 1024
     log = open(os.path.join(mydir, 'kbp.log'), 'wb')
+
+    def process_cache(cache):
+        for length, examples in cache.batches():
+            X, Y, types = dataset.featurizer.to_matrix(examples)
+            prob = model.predict(X, verbose=0)['p_relation']
+            prob *= typechecker.get_valid_cpu(types[:, 0], types[:, 1])
+            pred = prob.argmax(axis=1)
+            confidence = np_softmax(prob)[np.arange(len(pred)), pred]
+            for ex, rel, conf in zip(cache.examples, pred, confidence):
+                rel = dataset.featurizer.vocab['rel'].index2word[rel]
+                if rel == 'no_relation':
+                    continue
+                print "\t".join([str(s) for s in [ex.orig.subject_id, rel, ex.orig.object_id, conf]])
+
     for i, ex in enumerate(dev_generator):
         try:
             feat = dataset.featurizer.featurize(ex, add=False)
@@ -55,14 +69,9 @@ if __name__ == '__main__':
         if len(cache) < max_cache_size:
             cache.examples += [feat]
             continue
-        for length, examples in cache.batches():
-            X, Y, types = dataset.featurizer.to_matrix(examples)
-            prob = model.predict(X, verbose=0)['p_relation']
-            prob *= typechecker.get_valid_cpu(types[:, 0], types[:, 1])
-            pred = prob.argmax(axis=1)
-            confidence = np_softmax(prob)[np.arange(len(pred)), pred]
-            for ex, rel, conf in zip(cache.examples, pred, confidence):
-                print "\t".join([str(s) for s in [ex.orig.subject_id, dataset.featurizer.vocab['rel'].index2word[rel], ex.orig.object_id, conf]])
+        process_cache(cache)
         cache.examples = []
         log.write(str(i) + "\n")
+    process_cache(cache)
+    cache.examples = []
 

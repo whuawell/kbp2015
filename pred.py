@@ -4,7 +4,7 @@
 Usage: pred.py <model_dir> [--evaluation=<DATA>] [--debug]
 
 Options:
-    --evaluation=<DATA>     [default: eval]
+    --evaluation=<DATA>     [default: kbp_eval]
 
 """
 import os
@@ -43,13 +43,50 @@ if __name__ == '__main__':
     trainer = Trainer('.', model, typechecker, scoring_labels)
     best_scores = trainer.run_epoch(dev_split, train=False, return_pred=True)
 
+    todir = os.path.join(root, 'preds')
+    if not os.path.isdir(todir):
+        os.makedirs(todir)
+    print 'predictions output at', todir
+
+    from plot_utils import plot_confusion_matrix, plot_histogram, get_sorted_labels, parse_gabor_report, parse_sklearn_report, combine_report, retrieve_wrong_examples
     import json
-    with open('preds.json', 'wb') as f:
-        json.dump({k: v for k, v in best_scores.items() if k in ['preds', 'targs', 'ids']}, f)
-    with open('pred_scores.json', 'wb') as f:
+    from sklearn.metrics import classification_report
+
+    wrongs = retrieve_wrong_examples(dev_split.examples,
+                                     best_scores['ids'],
+                                     best_scores['preds'],
+                                     best_scores['targs'],
+                                     dataset.featurizer.vocab['rel']
+    )
+    with open(os.path.join(todir, 'wrongs.json'), 'wb') as f:
+        json.dump(wrongs, f, indent=2, sort_keys=True)
+
+    sklearn_report = classification_report(
+        best_scores['targs'], best_scores['preds'],
+        target_names=dataset.featurizer.vocab['rel'].index2word)
+    with open(os.path.join(mydir, 'data', 'raw', 'gabor_report.txt')) as f:
+        gabor = f.read()
+    gabor_report = parse_gabor_report(gabor)
+    sklearn_report = parse_sklearn_report(str(sklearn_report))
+    combined_report = combine_report(sklearn_report, gabor_report, dataset.featurizer.vocab['rel'].counts)
+
+    with open(os.path.join(todir, 'classification_report.txt'), 'wb') as f:
+        f.write(combined_report)
+
+    order, labels, counts = get_sorted_labels(best_scores['targs'], dataset.featurizer.vocab)
+    fig = plot_confusion_matrix(best_scores['targs'], best_scores['preds'], order, labels)
+    fig.savefig(os.path.join(todir, 'confusion_matrix.png'))
+
+    fig = plot_histogram(labels, counts)
+    fig.savefig(os.path.join(todir, 'relation_histogram.png'))
+
+    with open(os.path.join(todir, 'best_scores.json'), 'wb') as f:
         del best_scores['preds']
         del best_scores['targs']
         del best_scores['ids']
         json.dump(best_scores, f, sort_keys=True)
+    print 'best scores'
+    pprint(best_scores)
+
     print 'best scores'
     pprint(best_scores)
