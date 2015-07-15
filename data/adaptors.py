@@ -109,7 +109,7 @@ class KBPDataAdaptor(DatasetAdaptor):
         for line in sys.stdin:
             row = line.split("\t")
             if len(row) < 2:
-                break
+               continue 
             yield self.to_example(row)
 
 
