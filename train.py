@@ -22,6 +22,7 @@ from data.typecheck import *
 from data.pretrain import Senna
 from time import time
 from keras.utils.generic_utils import Progbar
+import cPickle as pkl
 
 
 class Trainer(object):
@@ -129,7 +130,10 @@ if __name__ == '__main__':
     todir = os.path.join(mydir, name)
     if not os.path.isdir(todir):
         os.makedirs(todir)
+    print 'saving'
     config.save(os.path.join(todir, 'config.json'))
+    with open(os.path.join(todir, 'featurizer.pkl'), 'wb') as f:
+        pkl.dump(dataset.featurizer, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     typechecker = TypeCheckAdaptor(os.path.join(mydir, 'data', 'raw', 'typecheck.csv'), dataset.featurizer.vocab)
     scoring_labels = [i for i in xrange(len(dataset.featurizer.vocab['rel'])) if i != dataset.featurizer.vocab['rel']['no_relation']]

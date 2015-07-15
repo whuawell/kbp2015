@@ -18,6 +18,7 @@ from data.dataset import Dataset, Split
 from data.adaptors import *
 from data.typecheck import TypeCheckAdaptor
 from models import get_model
+import cPickle as pkl
 
 
 if __name__ == '__main__':
@@ -25,10 +26,12 @@ if __name__ == '__main__':
 
     root = os.path.abspath(args['<model_dir>'])
     config = Config.load(os.path.join(root, 'config.json'))
-    dataset = Dataset.load(config.data)
-    typechecker = TypeCheckAdaptor(os.path.join(mydir, 'data', 'raw', 'typecheck.csv'), dataset.featurizer.vocab)
+    with open(os.path.join(root, 'featurizer.pkl')) as f:
+        featurizer = pkl.load(f)
+    
+    typechecker = TypeCheckAdaptor(os.path.join(mydir, 'data', 'raw', 'typecheck.csv'), featurizer.vocab)
 
-    model = get_model(config, dataset.featurizer.vocab, typechecker)
+    model = get_model(config, featurizer.vocab, typechecker)
     model.load_weights(os.path.join(root, 'best_weights'))
 
     dev_generator = {
@@ -38,8 +41,8 @@ if __name__ == '__main__':
     }[args['--evaluation']]
 
     from train import Trainer
-    dev_split = Split(dev_generator, dataset.featurizer, add=False)
-    scoring_labels = [i for i in xrange(len(dataset.featurizer.vocab['rel'])) if i != dataset.featurizer.vocab['rel']['no_relation']]
+    dev_split = Split(dev_generator, featurizer, add=False)
+    scoring_labels = [i for i in xrange(len(featurizer.vocab['rel'])) if i != featurizer.vocab['rel']['no_relation']]
     trainer = Trainer('.', model, typechecker, scoring_labels)
     best_scores = trainer.run_epoch(dev_split, train=False, return_pred=True)
 
@@ -56,24 +59,24 @@ if __name__ == '__main__':
                                      best_scores['ids'],
                                      best_scores['preds'],
                                      best_scores['targs'],
-                                     dataset.featurizer.vocab['rel']
+                                     featurizer.vocab['rel']
     )
     with open(os.path.join(todir, 'wrongs.json'), 'wb') as f:
         json.dump(wrongs, f, indent=2, sort_keys=True)
 
     sklearn_report = classification_report(
         best_scores['targs'], best_scores['preds'],
-        target_names=dataset.featurizer.vocab['rel'].index2word)
+        target_names=featurizer.vocab['rel'].index2word)
     with open(os.path.join(mydir, 'data', 'raw', 'gabor_report.txt')) as f:
         gabor = f.read()
     gabor_report = parse_gabor_report(gabor)
     sklearn_report = parse_sklearn_report(str(sklearn_report))
-    combined_report = combine_report(sklearn_report, gabor_report, dataset.featurizer.vocab['rel'].counts)
+    combined_report = combine_report(sklearn_report, gabor_report, featurizer.vocab['rel'].counts)
 
     with open(os.path.join(todir, 'classification_report.txt'), 'wb') as f:
         f.write(combined_report)
 
-    order, labels, counts = get_sorted_labels(best_scores['targs'], dataset.featurizer.vocab)
+    order, labels, counts = get_sorted_labels(best_scores['targs'], featurizer.vocab)
     fig = plot_confusion_matrix(best_scores['targs'], best_scores['preds'], order, labels)
     fig.savefig(os.path.join(todir, 'confusion_matrix.png'))
 
