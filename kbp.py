@@ -1,4 +1,3 @@
-#!/u/nlp/packages/anaconda/bin/safepython
 #!/usr/bin/env python
 import os
 mydir = os.path.dirname(os.path.abspath(__file__))
@@ -57,7 +56,7 @@ if __name__ == '__main__':
             prob *= typechecker.get_valid_cpu(types[:, 0], types[:, 1])
             pred = prob.argmax(axis=1)
             confidence = np_softmax(prob)[np.arange(len(pred)), pred]
-            for ex, rel, conf in zip(cache.examples, pred, confidence):
+            for ex, rel, conf in zip(examples, pred, confidence):
                 rel = featurizer.vocab['rel'].index2word[rel]
                 if rel == 'no_relation':
                     continue
