@@ -24,7 +24,7 @@ def get_model(config, vocab, typechecker):
         'single_small': single_small,
     }[config.model]
     graph, out = fetch(vocab, config)
-    graph.compile(rmsprop(lr=config.lr, clipnorm=5.), {out: typechecker.filtered_crossentropy})
+    graph.compile(rmsprop(lr=config.lr, clipnorm=25.), {out: typechecker.filtered_crossentropy})
     return graph
 
 def get_rnn(config):
