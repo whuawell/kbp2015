@@ -34,4 +34,5 @@ class Config(dict):
             'optim': 'rmsprop',
             'lr': 1e-2,
             'max_epoch': 20,
+            'corrupt': True,
         })

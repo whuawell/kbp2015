@@ -1,6 +1,7 @@
 __author__ = 'victor'
 from dataset import Example, Vocab
 import numpy as np
+from copy import deepcopy
 from dependency import NoPathException, DependencyParse
 
 
@@ -23,7 +24,6 @@ class Featurizer(object):
             return ex.object_ner
         return ex.words[index]
 
-
     def featurize(self, ex, add=False):
         raise NotImplementedError()
 
@@ -31,6 +31,9 @@ class Featurizer(object):
         Y = np.zeros((y.size, len(self.vocab['rel'])))
         Y[np.arange(len(y)), y] = 1
         return Y.astype('float32')
+
+    def corrupt(self, feat, add=False):
+        raise NotImplementedError()
 
 
 class DependencyFeaturizer(Featurizer):
@@ -67,6 +70,19 @@ class SinglePathDependencyFeaturizer(DependencyFeaturizer):
         feat.sequence = [self.vocab['word'].get(w, add) for w in ex.sequence]
         ex.length = feat.length = len(sequence)
         return feat
+
+    def corrupt(self, feat, add=False):
+        corrupted = Example(**deepcopy(feat.__dict__))
+        corrupted.corrupt = True
+        # randomly drop a node
+        drop = np.random.randint(0, len(corrupted.sequence))
+        sequence = corrupted.sequence[:drop]
+        if drop < len(corrupted.sequence) - 1:
+            sequence += corrupted.sequence[drop+1:]
+        corrupted.sequence = sequence
+        corrupted.relation = self.vocab['rel'].add('no_relation')
+        corrupted.length = len(corrupted.sequence)
+        return corrupted if corrupted.length else None
 
     def decode_sequence(self, ex):
         sequence = [self.vocab['word'].index2word[w] for w in ex.sequence]

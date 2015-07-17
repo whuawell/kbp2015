@@ -116,6 +116,8 @@ if __name__ == '__main__':
         dataset = Dataset.load(os.path.join(mydir, 'data', 'saves', config.data))
     else:
         config.data = os.path.join('supervision_evaluation_' + config.featurizer)
+        if config.corrupt:
+            config.data += '_corrupt'
         datasets = {
             'supervised': SupervisedDataAdaptor(),
             'kbp_eval': KBPEvaluationDataAdaptor(),
@@ -129,10 +131,10 @@ if __name__ == '__main__':
             'sent3': SinglePathSentenceFeaturizer(scope=3, word=Senna()),
             'sent0': SinglePathSentenceFeaturizer(scope=0, word=Senna()),
         }[config.featurizer]
-        dataset = Dataset.build(train_generator, dev_generator, featurizer)
+        dataset = Dataset.build(train_generator, dev_generator, featurizer, corrupt=True)
         dataset.save(os.path.join(mydir, 'data', 'saves', config.data))
-    print 'using train split', dataset.train
-    print 'using dev split', dataset.dev
+    print 'using train split', dataset.train, 'of size', len(dataset.train)
+    print 'using dev split', dataset.dev, 'of size', len(dataset.dev)
     print 'using featurizer', dataset.featurizer
     print 'using config'
     pprint(config)
