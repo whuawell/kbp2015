@@ -23,7 +23,7 @@ class Config(dict):
             'rnn': 'lstm',
             'train': 'supervised',
             'dev': 'kbp_eval',
-            'featurizer': 'sent',
+            'featurizer': 'single',
             'model': 'single_small',
             'emb_dim': 50,
             'hidden': (512, 512),

@@ -126,6 +126,8 @@ if __name__ == '__main__':
             'concat': ConcatenatedDependencyFeaturizer(word=Senna()),
             'single': SinglePathDependencyFeaturizer(word=Senna()),
             'sent': SinglePathSentenceFeaturizer(word=Senna()),
+            'sent3': SinglePathSentenceFeaturizer(scope=3, word=Senna()),
+            'sent0': SinglePathSentenceFeaturizer(scope=0, word=Senna()),
         }[config.featurizer]
         dataset = Dataset.build(train_generator, dev_generator, featurizer)
         dataset.save(os.path.join(mydir, 'data', 'saves', config.data))

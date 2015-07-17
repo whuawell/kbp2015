@@ -151,28 +151,44 @@ class ConcatenatedDependencyFeaturizer(DependencyFeaturizer):
 
 class SentenceFeaturizer(Featurizer):
 
+    def __init__(self, scope=-1, **vocab_kwargs):
+        super(SentenceFeaturizer, self).__init__(**vocab_kwargs)
+        self.scope = scope
+
     def featurize(self, ex, add=False):
         isbetween = lambda x, start, end: x >= start and x < end
         if isbetween(ex.subject_begin, ex.object_begin, ex.object_end) or isbetween(ex.object_begin, ex.subject_begin, ex.subject_end):
             raise NoPathException(str(ex))
+
+        first = 'subject' if ex.subject_begin < ex.object_begin else 'object'
+        second = 'object' if ex.subject_begin < ex.object_begin else 'subject'
+        chunk0 = ex.words[:ex[first + '_begin']] 
+        chunk1 = chunk0 + [ex[first + '_ner']] 
+        chunk2 = chunk1 + ex.words[ex[first + '_end']:ex[second + '_begin']]
+        sequence = chunk2 + [ex[second + '_ner']] + ex.words[ex[second + '_end']:]
+        first_pos = len(chunk0)
+        second_pos = len(chunk2)
+
+        if self.scope > 0:
+            start = max(0, first_pos - self.scope)
+            end = min(len(sequence), second_pos + self.scope + 1)
+            sequence = sequence[start:end]
 
         feat = Example(**{
             'relation': self.vocab['rel'].get(ex.relation, add=add) if ex.relation else None,
             'subject_ner': self.vocab['ner'].get(ex.subject_ner, add=add),
             'object_ner': self.vocab['ner'].get(ex.object_ner, add=add),
             'orig': ex,
+            'sequence': [self.vocab['word'].get(w, add=add) for w in sequence],
+            'subject_pos': first_pos if first == 'subject' else second_pos,
+            'object_pos': first_pos if first == 'object' else second_pos,
         })
+        ex.length = feat.length = len(feat.sequence)
 
         return feat
 
 
 class SinglePathSentenceFeaturizer(SentenceFeaturizer):
-
-    def featurize(self, ex, add=False):
-        feat = super(SinglePathSentenceFeaturizer, self).featurize(ex, add)
-        feat['sequence'] = [self.vocab['word'].get(w, add=add) for w in ex.words]
-        ex.length = feat.length = len(feat.sequence)
-        return feat
 
     def decode_sequence(self, ex):
         sequence = [self.vocab['word'].index2word[w] for w in ex.sequence]
