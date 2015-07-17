@@ -187,7 +187,7 @@ if __name__ == '__main__':
 
     train_generator = SupervisedDataAdaptor().to_examples('raw/supervision.csv')
     dev_generator = KBPEvaluationDataAdaptor().to_examples('raw/evaluation.tsv')
-    featurizer = ConcatenatedFeaturizer(word=Senna())
+    featurizer = ConcatenatedDependencyFeaturizer(word=Senna())
 
     save = 'saves/supervision_evaluation'
     if not os.path.isdir(save):

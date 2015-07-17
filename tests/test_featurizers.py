@@ -18,7 +18,7 @@ class TestFeaturizer(object):
 class TestSingleSequence(unittest.TestCase, TestFeaturizer):
 
     def setUp(self):
-        self.featurizer = SinglePathFeaturizer()
+        self.featurizer = SinglePathDependencyFeaturizer()
 
     def test_featurize(self):
         ex = Example(words=self.words, dependency=self.dep, ner=self.ner, pos=self.pos,
@@ -36,7 +36,7 @@ class TestSingleSequence(unittest.TestCase, TestFeaturizer):
 class TestConcatenated(unittest.TestCase, TestFeaturizer):
 
     def setUp(self):
-        self.featurizer = ConcatenatedFeaturizer()
+        self.featurizer = ConcatenatedDependencyFeaturizer()
 
     def test_featurize(self):
         ex = Example(words=self.words, dependency=self.dep, ner=self.ner, pos=self.pos,

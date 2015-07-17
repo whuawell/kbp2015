@@ -10,8 +10,6 @@ import os
 import sys
 import json
 sys.setrecursionlimit(50000)
-mydir = os.path.dirname(__file__)
-sys.path.append(os.path.join(mydir, 'data'))
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, classification_report
 from models import get_model
 from configs.config import Config
@@ -24,6 +22,8 @@ from time import time
 from keras.utils.generic_utils import Progbar
 import cPickle as pkl
 
+mydir = os.path.dirname(__file__)
+sys.path.append(os.path.join(mydir, 'data'))
 
 class Trainer(object):
 
@@ -112,14 +112,23 @@ if __name__ == '__main__':
 
     config = Config.default() if args['--config'] == 'default' else Config.load(args['--config'])
 
-    if not os.path.isdir(config.data):
-        train_generator = SupervisedDataAdaptor().to_examples('data/raw/supervision.csv')
-        dev_generator = KBPEvaluationDataAdaptor().to_examples('data/raw/evaluation.tsv')
-        featurizer = ConcatenatedFeaturizer(word=Senna()) if 'concat' in config.model else SinglePathFeaturizer(word=Senna())
-        dataset = Dataset.build(train_generator, dev_generator, featurizer)
-        dataset.save(config.data)
+    if 'data' in config and os.path.isdir(os.path.join(mydir, 'data', 'saves', config.data)):
+        dataset = Dataset.load(os.path.join(mydir, 'data', 'saves', config.data))
     else:
-        dataset = Dataset.load(config.data)
+        config.data = os.path.join('supervision_evaluation_' + config.featurizer)
+        datasets = {
+            'supervised': SupervisedDataAdaptor(),
+            'kbp_eval': KBPEvaluationDataAdaptor(),
+        }
+        train_generator = datasets[config.train].to_examples()
+        dev_generator = datasets[config.dev].to_examples()
+        featurizer = {
+            'concat': ConcatenatedDependencyFeaturizer(word=Senna()),
+            'single': SinglePathDependencyFeaturizer(word=Senna()),
+            'sent': SinglePathSentenceFeaturizer(word=Senna()),
+        }[config.featurizer]
+        dataset = Dataset.build(train_generator, dev_generator, featurizer)
+        dataset.save(os.path.join(mydir, 'data', 'saves', config.data))
     print 'using train split', dataset.train
     print 'using dev split', dataset.dev
     print 'using featurizer', dataset.featurizer

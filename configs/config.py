@@ -21,7 +21,9 @@ class Config(dict):
     def default(cls):
         return Config(**{
             'rnn': 'lstm',
-            'data': 'data/saves/supervision_evaluation_single',
+            'train': 'supervised',
+            'dev': 'kbp_eval',
+            'featurizer': 'sent',
             'model': 'single_small',
             'emb_dim': 50,
             'hidden': (512, 512),

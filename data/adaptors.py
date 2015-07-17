@@ -1,6 +1,9 @@
 __author__ = 'victor'
 from dataset import Example
 import csv
+import os
+mydir = os.path.dirname(os.path.abspath(__file__))
+rawdir = os.path.join(mydir, 'raw')
 
 class DatasetAdaptor(object):
 
@@ -67,7 +70,9 @@ class SupervisedDataAdaptor(DatasetAdaptor):
         ex = Example(**d)
         return self.convert_types(ex)
 
-    def to_examples(self, fname):
+    def to_examples(self, fname=None):
+        if fname is None:
+            fname = os.path.join(rawdir, 'supervision.csv')
         with open(fname) as f:
             reader = csv.reader(f)
             for row in reader:
@@ -96,7 +101,9 @@ class KBPDataAdaptor(DatasetAdaptor):
             ex[k] = ex[k].replace("\\n", "\n").replace("\\t", "\t")
         return self.convert_types(ex)
 
-    def to_examples(self, fname):
+    def to_examples(self, fname=None):
+        if fname is None:
+            fname = os.path.join(rawdir, 'test.sample.tsv')
         with open(fname) as f:
             for row in f:
                 yield self.to_example(row.split("\t"))
@@ -143,3 +150,9 @@ class KBPEvaluationDataAdaptor(KBPDataAdaptor):
         for k in ['dependency', 'dep_extra', 'dep_malt']:
             ex[k] = ex[k].replace("\\n", "\n").replace("\\t", "\t")
         return self.convert_types(ex)
+
+    def to_examples(self, fname=None):
+        if fname is None:
+            fname = os.path.join(rawdir, 'evaluation.tsv')
+        for example in super(KBPEvaluationDataAdaptor, self).to_examples(fname):
+            yield example

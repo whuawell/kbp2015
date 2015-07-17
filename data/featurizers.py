@@ -23,6 +23,18 @@ class Featurizer(object):
             return ex.object_ner
         return ex.words[index]
 
+
+    def featurize(self, ex, add=False):
+        raise NotImplementedError()
+
+    def one_hot(self, y):
+        Y = np.zeros((y.size, len(self.vocab['rel'])))
+        Y[np.arange(len(y)), y] = 1
+        return Y.astype('float32')
+
+
+class DependencyFeaturizer(Featurizer):
+
     def featurize(self, ex, add=False):
         if not ex.dependency: # no dependency parse
             raise NoPathException(str(ex))
@@ -40,16 +52,11 @@ class Featurizer(object):
             raise NoPathException(str(ex))
         return feat
 
-    def one_hot(self, y):
-        Y = np.zeros((y.size, len(self.vocab['rel'])))
-        Y[np.arange(len(y)), y] = 1
-        return Y.astype('float32')
 
-
-class SinglePathFeaturizer(Featurizer):
+class SinglePathDependencyFeaturizer(DependencyFeaturizer):
 
     def featurize(self, ex, add=False):
-        feat = super(SinglePathFeaturizer, self).featurize(ex, add)
+        feat = super(SinglePathDependencyFeaturizer, self).featurize(ex, add)
         sequence = []
         for from_, to_, arc in feat.dependency:
             if arc == 'root':
@@ -81,10 +88,10 @@ class SinglePathFeaturizer(Featurizer):
         return X, Y, np.array(types)
 
 
-class ConcatenatedFeaturizer(Featurizer):
+class ConcatenatedDependencyFeaturizer(DependencyFeaturizer):
 
     def featurize(self, ex, add=False):
-        feat = super(ConcatenatedFeaturizer, self).featurize(ex, add)
+        feat = super(ConcatenatedDependencyFeaturizer, self).featurize(ex, add)
         sequence = []
         for child, parent, arc in feat.dependency:
             if arc.endswith('_from') or arc == 'root':
@@ -140,3 +147,48 @@ class ConcatenatedFeaturizer(Featurizer):
         for k, v in X.items():
             assert len(v) == len(Y['p_relation'])
         return {k: np.array(v) for k, v in X.items()}, Y, np.array(types)
+
+
+class SentenceFeaturizer(Featurizer):
+
+    def featurize(self, ex, add=False):
+        isbetween = lambda x, start, end: x >= start and x < end
+        if isbetween(ex.subject_begin, ex.object_begin, ex.object_end) or isbetween(ex.object_begin, ex.subject_begin, ex.subject_end):
+            raise NoPathException(str(ex))
+
+        feat = Example(**{
+            'relation': self.vocab['rel'].get(ex.relation, add=add) if ex.relation else None,
+            'subject_ner': self.vocab['ner'].get(ex.subject_ner, add=add),
+            'object_ner': self.vocab['ner'].get(ex.object_ner, add=add),
+            'orig': ex,
+        })
+
+        return feat
+
+
+class SinglePathSentenceFeaturizer(SentenceFeaturizer):
+
+    def featurize(self, ex, add=False):
+        feat = super(SinglePathSentenceFeaturizer, self).featurize(ex, add)
+        feat['sequence'] = [self.vocab['word'].get(w, add=add) for w in ex.words]
+        ex.length = feat.length = len(feat.sequence)
+        return feat
+
+    def decode_sequence(self, ex):
+        sequence = [self.vocab['word'].index2word[w] for w in ex.sequence]
+        return sequence
+
+    def to_matrix(self, examples):
+        X = {'word_input': []}
+        Y = {'p_relation': []}
+        types = []
+        for ex in examples:
+            X['word_input'].append(ex.sequence)
+            Y['p_relation'].append(ex.relation)
+            types.append([ex.subject_ner, ex.object_ner])
+        X['word_input'] = np.array(X['word_input'])
+        Y['p_relation'] = [None] * len(Y['p_relation']) if None in Y['p_relation'] else self.one_hot(np.array(Y['p_relation']))
+        # double check lengths
+        for k, v in X.items():
+            assert len(v) == len(Y['p_relation'])
+        return X, Y, np.array(types)
