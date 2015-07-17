@@ -22,7 +22,7 @@ class Config(dict):
         return Config(**{
             'rnn': 'lstm',
             'data': 'data/saves/supervision_evaluation_single',
-            'model': 'single',
+            'model': 'single_small',
             'emb_dim': 50,
             'hidden': (512, 512),
             'dropout': 0.5,

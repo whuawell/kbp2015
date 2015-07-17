@@ -21,6 +21,7 @@ def get_model(config, vocab, typechecker):
         'concat': concatenated,
         'single': single,
         'single_conv': single_conv,
+        'single_small': single_small,
     }[config.model]
     graph, out = fetch(vocab, config)
     graph.compile(rmsprop(lr=config.lr, clipnorm=5.), {out: typechecker.filtered_crossentropy})
@@ -91,6 +92,25 @@ def single(vocab, config):
         name='RNN2', input='drop1')
     graph.add_node(Dropout(config.dropout), 'drop2', input='RNN2')
     graph.add_node(Dense(n_out, len(vocab['rel'])), 'dense2', input='drop2')
+    graph.add_output(name='p_relation', input='dense2')
+
+    return graph, 'p_relation'
+
+def single_small(vocab, config):
+    RNN = get_rnn(config)
+
+    graph = Graph()
+    graph.add_input(name='word_input', ndim=2, dtype='int')
+    graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
+    graph.add_node(Dropout(config.dropout), 'drop0', input='word_emb')
+
+    n_in = config.emb_dim
+    n_out = config.hidden[0]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
+        name='RNN1', input='drop0')
+    graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
+    graph.add_node(Dense(n_out, len(vocab['rel'])), 'dense2', input='drop1')
     graph.add_output(name='p_relation', input='dense2')
 
     return graph, 'p_relation'
