@@ -24,7 +24,7 @@ class Config(dict):
             'train': 'supervised',
             'dev': 'kbp_eval',
             'featurizer': 'single',
-            'model': 'single_small',
+            'model': 'single',
             'emb_dim': 50,
             'hidden': (512, 512),
             'dropout': 0.5,
@@ -33,6 +33,6 @@ class Config(dict):
             'reg': 1e-4,
             'optim': 'rmsprop',
             'lr': 1e-2,
-            'max_epoch': 20,
-            'corrupt': True,
+            'max_epoch': 30,
+            'num_corrupt': 1,
         })

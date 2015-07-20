@@ -75,11 +75,11 @@ class Split(object):
 
     ignore_relations = {'org:website', 'org:date_founded'}
 
-    def __init__(self, generator, featurizer, add=False, handle_no_path='short', corrupt=False):
+    def __init__(self, generator, featurizer, add=False, handle_no_path='short', num_corrupt=0):
         self.featurizer = featurizer
         self.examples = []
         self.num_examples = 0
-        self.corrupt = corrupt
+        self.num_corrupt = num_corrupt
 
         for ex in generator:
             def raise_error(ex):
@@ -118,7 +118,7 @@ class Split(object):
             feat.orig = ex
             self.num_examples += 1
             self.examples += [feat]
-            if corrupt:
+            for n_cor in xrange(num_corrupt):
                 corrupted = self.featurizer.corrupt(feat, add=add)
                 if corrupted is None:
                     continue # failed to generate a corrupted example
@@ -171,9 +171,9 @@ class Dataset(object):
         self.train, self.dev, self.featurizer = train, dev, featurizer
 
     @classmethod
-    def build(cls, train_generator, dev_generator, featurizer, corrupt=False):
-        train = Split(train_generator, featurizer, add=True, corrupt=corrupt)
-        dev = Split(dev_generator, featurizer, add=False, corrupt=False)
+    def build(cls, train_generator, dev_generator, featurizer, num_corrupt=0):
+        train = Split(train_generator, featurizer, add=True, num_corrupt=num_corrupt)
+        dev = Split(dev_generator, featurizer, add=False, num_corrupt=0)
         return Dataset(train, dev, featurizer)
 
     def save(self, to_dir):

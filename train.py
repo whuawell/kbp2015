@@ -91,7 +91,7 @@ class Trainer(object):
             pprint(scores)
             self.log('train', scores)
             if dev_scores is not None:
-                if dev_scores[compare] > best_scores[compare]:
+                if dev_scores[compare] > best_scores[compare] and dev_scores['f1'] > 0.3:
                     best_scores = dev_scores.copy()
                     best_weights = self.model.get_weights()
 
@@ -115,9 +115,7 @@ if __name__ == '__main__':
     if 'data' in config and os.path.isdir(os.path.join(mydir, 'data', 'saves', config.data)):
         dataset = Dataset.load(os.path.join(mydir, 'data', 'saves', config.data))
     else:
-        config.data = os.path.join('supervision_evaluation_' + config.featurizer)
-        if config.corrupt:
-            config.data += '_corrupt'
+        config.data = 'supervision_evaluation_' + config.featurizer + '_corrupt' + str(config.num_corrupt)
         datasets = {
             'supervised': SupervisedDataAdaptor(),
             'kbp_eval': KBPEvaluationDataAdaptor(),
@@ -131,7 +129,7 @@ if __name__ == '__main__':
             'sent3': SinglePathSentenceFeaturizer(scope=3, word=Senna()),
             'sent0': SinglePathSentenceFeaturizer(scope=0, word=Senna()),
         }[config.featurizer]
-        dataset = Dataset.build(train_generator, dev_generator, featurizer, corrupt=True)
+        dataset = Dataset.build(train_generator, dev_generator, featurizer, num_corrupt=config.num_corrupt)
         dataset.save(os.path.join(mydir, 'data', 'saves', config.data))
     print 'using train split', dataset.train, 'of size', len(dataset.train)
     print 'using dev split', dataset.dev, 'of size', len(dataset.dev)
