@@ -1,8 +1,9 @@
 """ train.py
-Usage: train.py <name> [--config=<CONFIG>]
+Usage: train.py <name> [--config=<CONFIG>] [--options=<KWARGS>]
 
 Options:
     --config=<CONFIG>     [default: default]
+    --options=<KWARGS>    key value pair options like --options=train:supervised,dev:kbp_eval   [default: ""]
 """
 import numpy as np
 np.random.seed(42)
@@ -111,14 +112,23 @@ if __name__ == '__main__':
     pprint(args)
 
     config = Config.default() if args['--config'] == 'default' else Config.load(args['--config'])
+    for spec in args['--options'].split(','):
+        spec = spec.split(':')
+        assert len(spec) == 2, 'invalid option specified: %' % spec
+        k, v = spec
+        if isinstance(config[k], int): v = int(v)
+        if isinstance(config[k], float): v = float(v)
+        config[k] = v
 
     if 'data' in config and os.path.isdir(os.path.join(mydir, 'data', 'saves', config.data)):
         dataset = Dataset.load(os.path.join(mydir, 'data', 'saves', config.data))
     else:
-        config.data = 'supervision_evaluation_' + config.featurizer + '_corrupt' + str(config.num_corrupt)
+        config.data = '_'.join([config.train, config.dev, config.featurizer, 'corrupt' + str(config.num_corrupt)])
         datasets = {
             'supervised': SupervisedDataAdaptor(),
             'kbp_eval': KBPEvaluationDataAdaptor(),
+            'all_annotated': AllAnnotatedAdaptor(),
+            'self_training': SelfTrainingAdaptor(),
         }
         train_generator = datasets[config.train].to_examples()
         dev_generator = datasets[config.dev].to_examples()

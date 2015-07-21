@@ -160,6 +160,13 @@ class KBPEvaluationDataAdaptor(KBPDataAdaptor):
 
 class SelfTrainingAdaptor(KBPEvaluationDataAdaptor):
 
+    relation_map = {
+        'per:member_of': 'per:employee_of',
+        '': 'no_relation',
+        'false': 'no_relation',
+        '???': 'no_relation',
+    }
+
     headers = ['gloss', 'dependency', 'dep_extra', 'dep_malt', 'words', 'lemmas',
                'pos', 'ner', 'subject_id', 'subject', 'subject_link_score', 'subject_ner',
                'object_id', 'object', 'object_link_score', 'object_ner',
@@ -171,15 +178,20 @@ class SelfTrainingAdaptor(KBPEvaluationDataAdaptor):
         d = dict(zip(self.headers, row))
         ex = Example(**d)
         ex.relation = ex.annotated_relations.strip()
-        if not ex.relation:
-            ex.relation = 'no_relation'
         for k in ['pos']:
             ex[k] = ex[k].replace('`', "'")
+
         if ex.relation in self.relation_map:
             ex.relation = self.relation_map[ex.relation]
         for k in ['dependency', 'dep_extra', 'dep_malt']:
             ex[k] = ex[k].replace("\\n", "\n").replace("\\t", "\t")
         return self.convert_types(ex)
+
+    def to_examples(self, fname=None):
+        if fname is None:
+            fname = os.path.join(rawdir, 'self_training.tsv')
+        for example in super(SelfTrainingAdaptor, self).to_examples(fname):
+            yield example
 
 
 class AllAnnotatedAdaptor(DatasetAdaptor):
