@@ -8,7 +8,6 @@ Options:
 
 """
 import os
-mydir = os.path.dirname(os.path.abspath(__file__))
 from docopt import docopt
 import numpy as np
 from utils import np_softmax
@@ -22,6 +21,7 @@ import cPickle as pkl
 
 
 if __name__ == '__main__':
+    mydir = os.path.dirname(os.path.abspath(__file__))
     args = docopt(__doc__)
 
     root = os.path.abspath(args['<model_dir>'])
@@ -59,7 +59,7 @@ if __name__ == '__main__':
                                      best_scores['ids'],
                                      best_scores['preds'],
                                      best_scores['targs'],
-                                     featurizer.vocab['rel']
+                                     featurizer.vocab
     )
     with open(os.path.join(todir, 'wrongs.json'), 'wb') as f:
         json.dump(wrongs, f, indent=2, sort_keys=True)

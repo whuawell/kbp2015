@@ -83,7 +83,14 @@ def retrieve_wrong_examples(examples, ids, preds, targs, vocab):
     for idx, pred, targ in zip(ids, preds, targs):
         if pred != targ:
             ex = examples_by_ids[idx]
-            ex.pred = vocab.index2word[pred]
-            ex.targ = vocab.index2word[targ]
-            wrongs += [ex]
+            debug = {
+                    'pred': vocab['rel'].index2word[pred],
+                    'targ': vocab['rel'].index2word[targ],
+                    'sequence': ' '.join([vocab['word'].index2word[w] for w in ex.sequence]),
+                    'sentence': ' '.join(ex.orig.words),
+                    'subj': ex.orig.subject,
+                    'obj': ex.orig.object,
+                    'length': len(ex.sequence),
+                    }
+            wrongs += [debug]
     return wrongs
