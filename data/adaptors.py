@@ -65,8 +65,8 @@ class SupervisedDataAdaptor(DatasetAdaptor):
             ]
 
     def to_example(self, row):
+        assert len(row) == len(self.headers), "could not convert row to example %s\n%s" % (row, self.headers)
         d = dict(zip(self.headers, row))
-        assert len(d) == len(self.headers), "could not convert row to example %s\n%s" % (row, d)
         ex = Example(**d)
         return self.convert_types(ex)
 
@@ -94,8 +94,8 @@ class KBPDataAdaptor(DatasetAdaptor):
         return parsed
 
     def to_example(self, row):
+        assert len(row) == len(self.headers), "could not convert row to example %s\n%s" % (row, self.headers)
         d = dict(zip(self.headers, row))
-        assert len(d) == len(self.headers), "could not convert row to example %s\n%s" % (row, d)
         ex = Example(**d)
         for k in ['dependency', 'dep_extra', 'dep_malt']:
             ex[k] = ex[k].replace("\\n", "\n").replace("\\t", "\t")
@@ -138,8 +138,8 @@ class KBPEvaluationDataAdaptor(KBPDataAdaptor):
     }
 
     def to_example(self, row):
+        assert len(row) == len(self.headers), "could not convert row to example %s\n%s" % (row, self.headers)
         d = dict(zip(self.headers, row))
-        assert len(d) == len(self.headers), "could not convert row to example %s\n%s" % (row, d)
         ex = Example(**d)
         rels = self.parse_array(ex.known_relations)
         ex.relation = rels[0]
@@ -156,3 +156,41 @@ class KBPEvaluationDataAdaptor(KBPDataAdaptor):
             fname = os.path.join(rawdir, 'evaluation.tsv')
         for example in super(KBPEvaluationDataAdaptor, self).to_examples(fname):
             yield example
+
+
+class SelfTrainingAdaptor(KBPEvaluationDataAdaptor):
+
+    headers = ['gloss', 'dependency', 'dep_extra', 'dep_malt', 'words', 'lemmas',
+               'pos', 'ner', 'subject_id', 'subject', 'subject_link_score', 'subject_ner',
+               'object_id', 'object', 'object_link_score', 'object_ner',
+               'subject_begin', 'subject_end', 'object_begin', 'object_end', 'corpus_id',
+               'known_relations', 'incompatible_relations', 'annotated_relations']
+
+    def to_example(self, row):
+        assert len(row) == len(self.headers), "could not convert row to example %s\n%s" % (row, self.headers)
+        d = dict(zip(self.headers, row))
+        ex = Example(**d)
+        ex.relation = ex.annotated_relations.strip()
+        if not ex.relation:
+            ex.relation = 'no_relation'
+        for k in ['pos']:
+            ex[k] = ex[k].replace('`', "'")
+        if ex.relation in self.relation_map:
+            ex.relation = self.relation_map[ex.relation]
+        for k in ['dependency', 'dep_extra', 'dep_malt']:
+            ex[k] = ex[k].replace("\\n", "\n").replace("\\t", "\t")
+        return self.convert_types(ex)
+
+
+class AllAnnotatedAdaptor(DatasetAdaptor):
+
+    def __init__(self):
+        super(AllAnnotatedAdaptor, self).__init__()
+        self.supervised = SupervisedDataAdaptor()
+        self.annotated = SelfTrainingAdaptor()
+
+    def to_examples(self, fname=None):
+        for ex in self.supervised.to_examples():
+            yield ex
+        for ex in self.annotated.to_examples():
+            yield ex

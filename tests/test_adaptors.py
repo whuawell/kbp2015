@@ -185,5 +185,61 @@ class TestKBPEvaluationTest(unittest.TestCase, TestAdaptor):
         self.relation = 'per:spouse'
 
 
+class TestSelfTrainingAdaptor(unittest.TestCase, TestAdaptor):
+
+    def setUp(self):
+        self.file = os.path.join(mydir, '..', 'data', 'raw', 'self_training.tsv')
+        with open(self.file) as f:
+            reader = csv.reader(f, delimiter="\t")
+            self.raw = reader.next()
+
+        self.adaptor = SelfTrainingAdaptor()
+
+        self.words = ['-LSB-', '00', '-RSB-', 'Y.F.', 'Sasaki', ',', 'K.', 'Fujikawa', ',', 'K.',
+                      'Ishida', ',', 'N.', 'Kawamura', ',', 'Y.', 'Nishikawa', ',', 'S.', 'Ohta',
+                      ',', 'M.', 'Satoh', ',', 'H.', 'Madarame', ',', 'S.', 'Ueno', ',', 'N.',
+                      'Susa', ',', 'N.', 'Matsusaka', ',', 'S.', 'Tsuda', ',', 'The', 'alkaline',
+                      'single-cell', 'gel', 'electrophoresis', 'assay', 'with', 'mouse',
+                      'multiple', 'organs', ':', 'results', 'with', '00', 'aromatic', 'amines',
+                      'evaluated', 'by', 'the', 'IARC', 'and', 'US', 'NTP', ',', 'Mutat', '.']
+
+        self.lemmas = ['-lsb-', '00', '-rsb-', 'Y.F.', 'Sasaki', ',', 'K.', 'Fujikawa', ',', 'K.',
+                       'Ishida', ',', 'N.', 'Kawamura', ',', 'Y.', 'Nishikawa', ',', 'S.', 'Ohta',
+                       ',', 'M.', 'Satoh', ',', 'H.', 'Madarame', ',', 'S.', 'Ueno', ',', 'N.',
+                       'Susa', ',', 'N.', 'Matsusaka', ',', 'S.', 'Tsuda', ',', 'the', 'alkaline',
+                       'single-cell', 'gel', 'electrophoresis', 'assay', 'with', 'mouse',
+                       'multiple', 'organ', ':', 'result', 'with', '00', 'aromatic', 'amine',
+                       'evaluate', 'by', 'the', 'iarc', 'and', 'US', 'NTP', ',', 'Mutat', '.']
+
+        self.ner = [
+            'O', 'NUMBER', 'O', 'PERSON', 'PERSON', 'O', 'PERSON', 'PERSON', 'O', 'PERSON',
+            'PERSON', 'O', 'PERSON', 'PERSON', 'O', 'PERSON', 'PERSON', 'O', 'PERSON', 'PERSON',
+            'O', 'PERSON', 'PERSON', 'O', 'PERSON', 'PERSON', 'O', 'PERSON', 'PERSON', 'O',
+            'PERSON', 'PERSON', 'O', 'PERSON', 'PERSON', 'O', 'PERSON', 'PERSON', 'O', 'O', 'O',
+            'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'NUMBER', 'O', 'O', 'O', 'O',
+            'O', 'ORGANIZATION', 'O', 'COUNTRY', 'ORGANIZATION', 'O', 'PERSON', 'O'
+         ]
+
+        self.pos = [
+            '-LRB-', 'CD', '-RRB-', 'NNP', 'NNP', ',', 'NNP', 'NNP', ',', 'NNP', 'NNP', ',', 'NNP',
+            'NNP', ',', 'NNP', 'NNP', ',', 'NNP', 'NNP', ',', 'NNP', 'NNP', ',', 'NNP', 'NNP', ',',
+            'NNP', 'NNP', ',', 'NNP', 'NNP', ',', 'NNP', 'NNP', ',', 'NNP', 'NNP', ',', 'DT', 'NN',
+            'JJ', 'NN', 'NN', 'NN', 'IN', 'NN', 'JJ', 'NNS', ':', 'NNS', 'IN', 'CD', 'JJ', 'NNS',
+            'VBN', 'IN', 'DT', 'NN', 'CC', 'NNP', 'NNP', ',', 'NNP', '.'
+        ]
+
+        self.subject_begin = 30
+        self.subject_end = 32
+        self.subject = 'N. Susa'
+        self.subject_ner = 'PERSON'
+
+        self.object_begin = 33
+        self.object_end = 35
+        self.object = 'N. Matsusaka'
+        self.object_ner = 'PERSON'
+
+        self.relation = 'no_relation'
+
+
 if __name__ == '__main__':
     unittest.main()
