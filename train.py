@@ -120,10 +120,11 @@ if __name__ == '__main__':
         if isinstance(config[k], float): v = float(v)
         config[k] = v
 
-    if 'data' in config and os.path.isdir(os.path.join(mydir, 'data', 'saves', config.data)):
-        dataset = Dataset.load(os.path.join(mydir, 'data', 'saves', config.data))
+    config.data = '_'.join([config.train, config.dev, config.featurizer, 'corrupt' + str(config.num_corrupt)])
+    data_dir = os.path.join(mydir, 'data', 'saves', config.data)
+    if os.path.isdir(data_dir):
+        dataset = Dataset.load(data_dir)
     else:
-        config.data = '_'.join([config.train, config.dev, config.featurizer, 'corrupt' + str(config.num_corrupt)])
         datasets = {
             'supervised': SupervisedDataAdaptor(),
             'kbp_eval': KBPEvaluationDataAdaptor(),
@@ -140,7 +141,7 @@ if __name__ == '__main__':
             'sent0': SinglePathSentenceFeaturizer(scope=0, word=Senna()),
         }[config.featurizer]
         dataset = Dataset.build(train_generator, dev_generator, featurizer, num_corrupt=config.num_corrupt)
-        dataset.save(os.path.join(mydir, 'data', 'saves', config.data))
+        dataset.save(data_dir)
     print 'using train split', dataset.train, 'of size', len(dataset.train)
     print 'using dev split', dataset.dev, 'of size', len(dataset.dev)
     print 'using featurizer', dataset.featurizer

@@ -21,7 +21,7 @@ class Config(dict):
     def default(cls):
         return Config(**{
             'rnn': 'lstm',
-            'train': 'supervised',
+            'train': 'all_annotated',
             'dev': 'kbp_eval',
             'featurizer': 'single',
             'model': 'single',

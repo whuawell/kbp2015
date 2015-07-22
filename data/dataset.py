@@ -156,6 +156,7 @@ class Split(object):
         np.random.shuffle(lengths)
         for length in lengths:
             examples = length_map[length]
+            np.random.shuffle(examples)
             ids = np.array([e.id for e in examples])
             for i in xrange(0, len(examples), batch_size):
                 end = min(i+batch_size, len(examples))
