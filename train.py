@@ -3,7 +3,7 @@ Usage: train.py <name> [--config=<CONFIG>] [--options=<KWARGS>]
 
 Options:
     --config=<CONFIG>     [default: default]
-    --options=<KWARGS>    key value pair options like --options=train:supervised,dev:kbp_eval   [default: ""]
+    --options=<KWARGS>    key value pair options like --options=train:supervised,dev:kbp_eval   [default: ]
 """
 import numpy as np
 np.random.seed(42)
@@ -112,13 +112,14 @@ if __name__ == '__main__':
     pprint(args)
 
     config = Config.default() if args['--config'] == 'default' else Config.load(args['--config'])
-    for spec in args['--options'].split(','):
-        spec = spec.split(':')
-        assert len(spec) == 2, 'invalid option specified: %' % spec
-        k, v = spec
-        if isinstance(config[k], int): v = int(v)
-        if isinstance(config[k], float): v = float(v)
-        config[k] = v
+    if args['--options']:
+        for spec in args['--options'].split(','):
+            spec = spec.split(':')
+            assert len(spec) == 2, 'invalid option specified: %' % spec
+            k, v = spec
+            if isinstance(config[k], int): v = int(v)
+            if isinstance(config[k], float): v = float(v)
+            config[k] = v
 
     config.data = '_'.join([config.train, config.dev, config.featurizer, 'corrupt' + str(config.num_corrupt)])
     data_dir = os.path.join(mydir, 'data', 'saves', config.data)
