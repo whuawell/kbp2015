@@ -44,7 +44,7 @@ if __name__ == '__main__':
     model = get_model(config, featurizer.vocab, typechecker)
     model.load_weights(os.path.join(root, 'best_weights'))
 
-    dev_generator = KBPDataAdaptor().online_to_examples(disable_interrupts='victor'!=os.environ['USER'])
+    dev_generator = KBPDataAdaptor().online_to_examples()
     cache = Cache()
     max_cache_size = 2**15
     log = open(os.path.join(mydir, 'kbp.log'), 'wb')

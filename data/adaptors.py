@@ -82,7 +82,7 @@ class SupervisedDataAdaptor(DatasetAdaptor):
 class KBPDataAdaptor(DatasetAdaptor):
     headers = ['gloss', 'dependency', 'dep_extra', 'dep_malt', 'words', 'lemmas', 'pos', 'ner', 'subject_id',
                'subject_entity', 'subject_link_score', 'subject_ner', 'object_id', 'object_entity', 'object_link_score',
-               'object_ner', 'subject_begin', 'subject_end', 'object_begin', 'object_end']
+               'object_ner', 'subject_begin', 'subject_end', 'object_begin', 'object_end', 'corpus_id']
 
     def parse_array(self, words, zero_numbers=False):
         words = words.replace('"', '').replace(',,,', ',COMMA,')
@@ -108,15 +108,12 @@ class KBPDataAdaptor(DatasetAdaptor):
             for row in f:
                 yield self.to_example(row.split("\t"))
 
-    def online_to_examples(self, disable_interrupts=False):
+    def online_to_examples(self):
         import sys
-        if disable_interrupts:
-            import signal
-            s = signal.signal(signal.SIGINT, signal.SIG_IGN)
         for line in sys.stdin:
             row = line.split("\t")
             if len(row) < 2:
-               continue 
+                continue 
             yield self.to_example(row)
 
 
