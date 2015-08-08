@@ -52,6 +52,6 @@ class TypeCheckAdaptor(object):
             for ner2 in xrange(len(vocab['ner'])):
                 valid_types[ner1, ner2, vocab['rel']['no_relation']] = 1
         # allow misc types
-        valid_types[vocab['ner']['MISC'], :, :] = 1
-        valid_types[:, vocab['ner']['MISC'], :] = 1
+        # valid_types[vocab['ner']['MISC'], :, :] = 1
+        # valid_types[:, vocab['ner']['MISC'], :] = 1
         return valid_types

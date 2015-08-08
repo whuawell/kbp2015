@@ -3,16 +3,13 @@ Usage: train.py <name> [--config=<CONFIG>] [--options=<KWARGS>]
 
 Options:
     --config=<CONFIG>     [default: default]
-    --options=<KWARGS>    key value pair options like --options=train:supervised,dev:kbp_eval   [default: ""]
+    --options=<KWARGS>    key value pair options like --options=train:supervised,dev:kbp_eval   [default: ]
 """
-import numpy as np
-np.random.seed(42)
 import os
 import sys
 import json
 sys.setrecursionlimit(50000)
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, classification_report
-from models import get_model
 from configs.config import Config
 from data.dataset import *
 from data.adaptors import *
@@ -22,6 +19,12 @@ from data.pretrain import Senna
 from time import time
 from keras.utils.generic_utils import Progbar
 import cPickle as pkl
+
+import autograd.numpy as np
+from autograd import value_and_grad
+from autograd.util import quick_grad_check
+np.random.seed(42)
+
 
 mydir = os.path.dirname(__file__)
 sys.path.append(os.path.join(mydir, 'data'))
@@ -112,18 +115,20 @@ if __name__ == '__main__':
     pprint(args)
 
     config = Config.default() if args['--config'] == 'default' else Config.load(args['--config'])
-    for spec in args['--options'].split(','):
-        spec = spec.split(':')
-        assert len(spec) == 2, 'invalid option specified: %' % spec
-        k, v = spec
-        if isinstance(config[k], int): v = int(v)
-        if isinstance(config[k], float): v = float(v)
-        config[k] = v
+    if args['--options']:
+        for spec in args['--options'].split(','):
+            spec = spec.split(':')
+            assert len(spec) == 2, 'invalid option specified: %' % spec
+            k, v = spec
+            if isinstance(config[k], int): v = int(v)
+            if isinstance(config[k], float): v = float(v)
+            config[k] = v
 
-    if 'data' in config and os.path.isdir(os.path.join(mydir, 'data', 'saves', config.data)):
+    if 'data' not in config:
+        config.data = '_'.join([config.train, config.dev, config.featurizer, 'corrupt' + str(config.num_corrupt)])
+    if os.path.isdir(os.path.join(mydir, 'data', 'saves', config.data)):
         dataset = Dataset.load(os.path.join(mydir, 'data', 'saves', config.data))
     else:
-        config.data = '_'.join([config.train, config.dev, config.featurizer, 'corrupt' + str(config.num_corrupt)])
         datasets = {
             'supervised': SupervisedDataAdaptor(),
             'kbp_eval': KBPEvaluationDataAdaptor(),
@@ -132,13 +137,7 @@ if __name__ == '__main__':
         }
         train_generator = datasets[config.train].to_examples()
         dev_generator = datasets[config.dev].to_examples()
-        featurizer = {
-            'concat': ConcatenatedDependencyFeaturizer(word=Senna()),
-            'single': SinglePathDependencyFeaturizer(word=Senna()),
-            'sent': SinglePathSentenceFeaturizer(word=Senna()),
-            'sent3': SinglePathSentenceFeaturizer(scope=3, word=Senna()),
-            'sent0': SinglePathSentenceFeaturizer(scope=0, word=Senna()),
-        }[config.featurizer]
+        featurizer = SinglePathSentenceFeaturizer(word=Senna())
         dataset = Dataset.build(train_generator, dev_generator, featurizer, num_corrupt=config.num_corrupt)
         dataset.save(os.path.join(mydir, 'data', 'saves', config.data))
     print 'using train split', dataset.train, 'of size', len(dataset.train)
@@ -164,30 +163,123 @@ if __name__ == '__main__':
     invalids = dataset.dev.remove_invalid_examples(typechecker)
     print 'removed', len(invalids), 'invalid dev examples'
 
-    model = get_model(config, dataset.featurizer.vocab, typechecker)
-    trainer = Trainer(todir, model, typechecker, scoring_labels)
-    best_scores = trainer.train(dataset.train, dataset.dev, max_epoch=config.max_epoch)
+    word_vocab = dataset.featurizer.vocab['word']
+    rel_vocab = dataset.featurizer.vocab['rel']
+    # when computing precison/recall/f1, do not take into account no_relation
+    valid_classes = [i for i in xrange(len(rel_vocab)) if i != rel_vocab['no_relation']]
 
-    model.save_weights(os.path.join(todir, 'best_weights'), overwrite=True)
+    from pystacks.param import ParamServer
+    from pystacks.layers.recurrent import LSTMMemoryLayer
+    from pystacks.layers.embedding import LookupTable
+    from pystacks.regularizers import Dropout
+    from pystacks.layers.core import Dense
+    from pystacks.layers.activations import LogSoftmax
+    from pystacks.initialization import Hardcode
+    from pystacks.optimizers import *
+    from pystacks.utils.logging import Progbar
+    from pystacks.utils.math import make_batches_by_len
+    from pystacks.grad_transformer import *
 
-    with open(os.path.join(todir, 'classification_report.txt'), 'wb') as f:
-        report = classification_report(best_scores['targs'], best_scores['preds'], target_names=dataset.featurizer.vocab['rel'].index2word)
-        f.write(report)
-    print report
+    server = ParamServer()
 
-    from plot_utils import plot_confusion_matrix, plot_histogram, get_sorted_labels
-    order, labels, counts = get_sorted_labels(best_scores['targs'], dataset.featurizer.vocab)
-    fig = plot_confusion_matrix(best_scores['targs'], best_scores['preds'], order, labels)
-    fig.savefig(os.path.join(todir, 'confusion_matrix.png'))
+    emb_size = 50
+    state_size = 128
+    num_epoch = 20
+    batch_size = 128
+    learning_rate = 1e-2
 
-    fig = plot_histogram(labels, counts)
-    fig.savefig(os.path.join(todir, 'relation_histogram.png'))
+    lookup_layer = LookupTable(len(word_vocab), emb_size)
+    lookup_layer.E.init = Hardcode(word_vocab.load_embeddings())
+    lookup_layer.register_params(server)
+    lstm_layer = LSTMMemoryLayer(emb_size, state_size, dropout=Dropout(0.5)).register_params(server)
 
-    with open(os.path.join(todir, 'best_scores.json'), 'wb') as f:
-        del best_scores['preds']
-        del best_scores['targs']
-        del best_scores['ids']
-        json.dump(best_scores, f, sort_keys=True)
-    print 'best scores'
-    pprint(best_scores)
+    rel_output_layer = Dense(state_size, len(rel_vocab)).register_params(server)
+    rel_softmax_layer = LogSoftmax().register_params(server)
 
+    word_output_layer = Dense(state_size, len(word_vocab)).register_params(server)
+    word_softmax_layer = LogSoftmax().register_params(server)
+
+    server.finalize()
+
+    def pred_fun(weights, x, types, train=False):
+        server.param_vector = weights
+        ht, ct = None, None
+        output_rel, output_word = [], []
+        for t in xrange(x.shape[1]):
+            emb = lookup_layer.forward(x[:, t], train=train)
+            ht, ct = lstm_layer.forward(emb, ht, ct, train=train)
+            pt_rel = rel_output_layer.forward(ht)
+            pt_rel = pt_rel * typechecker.get_valid_cpu(types[:, 0], types[:, 1])
+
+            output_rel.append(rel_softmax_layer.forward(pt_rel))
+            pt_word = word_output_layer.forward(ht)
+            output_word.append(word_softmax_layer.forward(pt_word))
+        return output_rel, output_word # Output normalized log-probabilities.
+
+    def loss_fun(weights, x, targets, types, train=False):
+        logprobs_rel, logprobs_word = pred_fun(weights, x, types, train=train)
+        loss_sum = - np.sum(logprobs_rel[-1] * targets)
+        for t in xrange(len(targets)-1):
+            loss_sum -= np.sum(logprobs_word[t][np.arange(len(x[:, t+1])), x[:, t+1]])
+        return loss_sum / float(x.shape[0])
+
+    def score(weights, inputs, targets, types, train=False):
+        targs = np.argmax(targets, axis=-1)
+        logprobs_rel, logprobs_word = pred_fun(weights, inputs, types, train)
+        preds = np.argmax(logprobs_word[-1], axis=-1)
+        acc = accuracy_score(targs, preds)
+        return targs, preds, acc
+        # return {'acc': acc, 'precision':precision, 'recall':recall, 'f1':f1}
+
+    # Build gradient of loss function using autograd.
+    loss_and_grad = value_and_grad(loss_fun)
+
+    # Check the gradients numerically, just to be safe
+    idx, x, y, types = dataset.train.batches(1).next()
+    quick_grad_check(loss_fun, server.param_vector, (x, y, types))
+
+    print("Training LSTM...")
+    optimizer = Adam()
+    start = time()
+    for epoch in xrange(1, num_epoch+1):
+        epoch_loss = 0.
+        targs, preds, num_seen = [], [], 0
+        print 'epoch', epoch
+        bar = Progbar('train', track=['loss', 'acc'])
+        for idx, x, y, types in dataset.train.batches(batch_size):
+            loss, dparams = loss_and_grad(server.param_vector, x, y, types, train=True)
+            epoch_loss += loss
+            num_seen += len(y)
+            server.update_params(optimizer, dparams, learning_rate)
+            targs_, preds_, acc = score(server.param_vector, x, y, types, train=False)
+            targs.append(targs_)
+            preds.append(preds_)
+            bar.update(num_seen/float(len(dataset.train)), new_values={'loss':loss, 'acc':acc})
+        bar.finish()
+
+        targs = np.concatenate(targs)
+        preds = np.concatenate(preds)
+        pprint({
+            'precison': precision_score(targs, preds, labels=valid_classes, average='micro'),
+            'recall': recall_score(targs, preds, labels=valid_classes, average='micro'),
+            'f1': f1_score(targs, preds, labels=valid_classes, average='micro')})
+
+        targs, preds, num_seen = [], [], 0
+        bar = Progbar('eval', track=['acc'])
+        for idx, x, y, types in dataset.dev.batches(batch_size):
+            targs_, preds_, acc = score(server.param_vector, x, y, train=False)
+            targs.append(targs_)
+            preds.append(preds_)
+            num_seen += len(y)
+            bar.update(num_seen/float(len(dataset.dev)), new_values={'acc': acc})
+        bar.finish()
+
+        targs = np.concatenate(targs)
+        preds = np.concatenate(preds)
+        pprint({
+            'precison': precision_score(targs, preds, labels=valid_classes, average='micro'),
+            'recall': recall_score(targs, preds, labels=valid_classes, average='micro'),
+            'f1': f1_score(targs, preds, labels=valid_classes, average='micro')})
+
+        print("epoch %s train loss %s in %s" % (epoch, epoch_loss, time() - start))
+        start = time()
