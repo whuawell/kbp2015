@@ -1,7 +1,7 @@
 __author__ = 'victor'
 from dataset import Vocab
 import os
-import numpy as np
+import autograd.numpy as np
 
 
 class Senna(Vocab):
@@ -22,3 +22,11 @@ class Senna(Vocab):
         embs = np.loadtxt(os.path.join(root, 'embeddings.txt'))
         words = self.load_wordlist()
         return dict(zip(words, embs))
+
+    def load_embeddings(self):
+        E = np.random.uniform(low=-0.1, high=0.1, size=(len(self), 50))
+        word2emb = self.load_word2emb()
+        for i, word in enumerate(self.index2word):
+            if word in word2emb:
+                E[i] = word2emb[word]
+        return E

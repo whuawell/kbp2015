@@ -89,18 +89,15 @@ class SinglePathDependencyFeaturizer(DependencyFeaturizer):
         return sequence
 
     def to_matrix(self, examples):
-        X = {'word_input': []}
-        Y = {'p_relation': []}
-        types = []
+        X, Y, types = [], [], []
         for ex in examples:
-            X['word_input'].append(ex.sequence)
-            Y['p_relation'].append(ex.relation)
+            X.append(ex.sequence)
+            Y.append(ex.relation)
             types.append([ex.subject_ner, ex.object_ner])
-        X['word_input'] = np.array(X['word_input'])
-        Y['p_relation'] = [None] * len(Y['p_relation']) if None in Y['p_relation'] else self.one_hot(np.array(Y['p_relation']))
+        X = np.array(X)
+        Y = [None] * len(Y) if None in Y else self.one_hot(np.array(Y))
         # double check lengths
-        for k, v in X.items():
-            assert len(v) == len(Y['p_relation'])
+        assert len(X) == len(Y)
         return X, Y, np.array(types)
 
 
@@ -211,16 +208,14 @@ class SinglePathSentenceFeaturizer(SentenceFeaturizer):
         return sequence
 
     def to_matrix(self, examples):
-        X = {'word_input': []}
-        Y = {'p_relation': []}
+        X, Y = [], []
         types = []
         for ex in examples:
-            X['word_input'].append(ex.sequence)
-            Y['p_relation'].append(ex.relation)
+            X.append(ex.sequence)
+            Y.append(ex.relation)
             types.append([ex.subject_ner, ex.object_ner])
-        X['word_input'] = np.array(X['word_input'])
-        Y['p_relation'] = [None] * len(Y['p_relation']) if None in Y['p_relation'] else self.one_hot(np.array(Y['p_relation']))
+        X = np.array(X)
+        Y = [None] * len(Y) if None in Y else self.one_hot(np.array(Y))
         # double check lengths
-        for k, v in X.items():
-            assert len(v) == len(Y['p_relation'])
+        assert len(X) == len(Y)
         return X, Y, np.array(types)
