@@ -28,8 +28,8 @@ sys.path.append(os.path.join(mydir, 'data'))
 
 class Trainer(object):
 
-    def __init__(self, log_dir, model, typechecker, labels):
-        self.model, self.typechecker, self.labels = model, typechecker, labels
+    def __init__(self, log_dir, model, typechecker, labels, class_weights):
+        self.model, self.typechecker, self.labels, self.class_weights = model, typechecker, labels, class_weights
         if not os.path.isdir(log_dir):
             os.makedirs(log_dir)
         self.log_dir = log_dir
@@ -42,13 +42,16 @@ class Trainer(object):
 
     def run_epoch(self, split, train=False, batch_size=128, return_pred=False):
         total = total_loss = 0
-        func = self.model.train_on_batch if train else self.model.test_on_batch
         ids, preds, targs = [], [], []
         prog = Progbar(split.num_examples)
         for idx, X, Y, types in split.batches(batch_size):
             X.update({k: np.concatenate([v, types], axis=1) for k, v in Y.items()})
+            X['length_input'] = np.ones((X['word_input'].shape[0], 1)) * X['word_input'].shape[1]
             batch_end = time()
-            loss = func(X)
+            if train:
+              loss = self.model.train_on_batch(X, class_weight=self.class_weights)
+            else:
+              loss = self.model.test_on_batch(X)
             prob = self.model.predict(X, verbose=0)['p_relation']
             prob *= self.typechecker.get_valid_cpu(types[:, 0], types[:, 1])
             pred = prob.argmax(axis=1)
@@ -75,12 +78,12 @@ class Trainer(object):
             ret.update({'ids': ids.tolist(), 'preds': preds.tolist(), 'targs': targs.tolist()})
         return ret
 
-    def train(self, train_split, dev_split=None, max_epoch=150):
+    def train(self, train_split, dev_split=None, max_epoch=50):
         best_scores, best_weights, dev_scores = {}, None, None
         compare = 'precision'
         best_scores[compare] = 0.
 
-        for epoch in xrange(max_epoch+1):
+        for epoch in xrange(1, max_epoch+1):
             start = time()
             print 'starting epoch', epoch
             print 'training...'
@@ -92,15 +95,15 @@ class Trainer(object):
             pprint(scores)
             self.log('train', scores)
             if dev_scores is not None:
-                if dev_scores[compare] > best_scores[compare] and dev_scores['f1'] > 0.3:
+                if dev_scores[compare] > best_scores[compare] and dev_scores['recall'] > 0.3:
                     best_scores = dev_scores.copy()
                     best_weights = self.model.get_weights()
+                    np.save("weights.p%s.r%s.npy" % (dev_scores['precision'], dev_scores['recall']), best_weights)
 
-        if best_weights is not None:
-            self.model.set_weights(best_weights)
-            scores = self.run_epoch(dev_split, False, return_pred=True)
-            assert scores[compare] == best_scores[compare]
-            best_scores = scores
+        self.model.set_weights(best_weights)
+        scores = self.run_epoch(dev_split, False, return_pred=True)
+        assert scores[compare] == best_scores[compare]
+        best_scores = scores
 
         return best_scores
 
@@ -138,8 +141,6 @@ if __name__ == '__main__':
             'concat': ConcatenatedDependencyFeaturizer(word=Senna()),
             'single': SinglePathDependencyFeaturizer(word=Senna()),
             'sent': SinglePathSentenceFeaturizer(word=Senna()),
-            'sent3': SinglePathSentenceFeaturizer(scope=3, word=Senna()),
-            'sent0': SinglePathSentenceFeaturizer(scope=0, word=Senna()),
         }[config.featurizer]
         dataset = Dataset.build(train_generator, dev_generator, featurizer, num_corrupt=config.num_corrupt)
         dataset.save(data_dir)
@@ -159,7 +160,10 @@ if __name__ == '__main__':
         pkl.dump(dataset.featurizer, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     typechecker = TypeCheckAdaptor(os.path.join(mydir, 'data', 'raw', 'typecheck.csv'), dataset.featurizer.vocab)
-    scoring_labels = [i for i in xrange(len(dataset.featurizer.vocab['rel'])) if i != dataset.featurizer.vocab['rel']['no_relation']]
+    rel_vocab = dataset.featurizer.vocab['rel']
+    scoring_labels = [i for i in xrange(len(rel_vocab)) if i != rel_vocab['no_relation']]
+    class_weights = {i:1./rel_vocab.counts[rel_vocab.index2word[i]] for i in xrange(len(rel_vocab))}
+    class_weights[dataset.featurizer.vocab['rel']['no_relation']] *= 10.
 
     invalids = dataset.train.remove_invalid_examples(typechecker)
     print 'removed', len(invalids), 'invalid training examples'
@@ -167,12 +171,13 @@ if __name__ == '__main__':
     print 'removed', len(invalids), 'invalid dev examples'
 
     model = get_model(config, dataset.featurizer.vocab, typechecker)
-    trainer = Trainer(todir, model, typechecker, scoring_labels)
+    trainer = Trainer(todir, model, typechecker, scoring_labels, class_weights)
     best_scores = trainer.train(dataset.train, dataset.dev, max_epoch=config.max_epoch)
 
     model.save_weights(os.path.join(todir, 'best_weights'), overwrite=True)
 
     with open(os.path.join(todir, 'classification_report.txt'), 'wb') as f:
+        print best_scores.keys()
         report = classification_report(best_scores['targs'], best_scores['preds'], target_names=dataset.featurizer.vocab['rel'].index2word)
         f.write(report)
     print report

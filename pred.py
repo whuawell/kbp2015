@@ -67,14 +67,15 @@ if __name__ == '__main__':
     sklearn_report = classification_report(
         best_scores['targs'], best_scores['preds'],
         target_names=featurizer.vocab['rel'].index2word)
-    with open(os.path.join(mydir, 'data', 'raw', 'gabor_report.txt')) as f:
-        gabor = f.read()
-    gabor_report = parse_gabor_report(gabor)
-    sklearn_report = parse_sklearn_report(str(sklearn_report))
-    combined_report = combine_report(sklearn_report, gabor_report, featurizer.vocab['rel'].counts)
+    #with open(os.path.join(mydir, 'data', 'raw', 'gabor_report.txt')) as f:
+    #    gabor = f.read()
+    #gabor_report = parse_gabor_report(gabor)
+    #sklearn_report = parse_sklearn_report(str(sklearn_report))
+    #combined_report = combine_report(sklearn_report, gabor_report, featurizer.vocab['rel'].counts)
 
     with open(os.path.join(todir, 'classification_report.txt'), 'wb') as f:
-        f.write(combined_report)
+        #f.write(combined_report)
+        f.write(sklearn_report)
 
     order, labels, counts = get_sorted_labels(best_scores['targs'], featurizer.vocab)
     fig = plot_confusion_matrix(best_scores['targs'], best_scores['preds'], order, labels)

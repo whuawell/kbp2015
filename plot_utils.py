@@ -92,5 +92,9 @@ def retrieve_wrong_examples(examples, ids, preds, targs, vocab):
                     'obj': ex.orig.object,
                     'length': len(ex.sequence),
                     }
+            for k in ['sentence', 'sequence']:
+              debug[k] = debug[k].replace(ex.orig.subject, '***' + ex.orig.subject + '***')
+              debug[k] = debug[k].replace(ex.orig.object, '***' + ex.orig.object + '***')
+
             wrongs += [debug]
     return wrongs

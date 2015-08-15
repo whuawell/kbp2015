@@ -80,7 +80,7 @@ class SinglePathDependencyFeaturizer(DependencyFeaturizer):
         if drop < len(corrupted.sequence) - 1:
             sequence += corrupted.sequence[drop+1:]
         corrupted.sequence = sequence
-        corrupted.relation = self.vocab['rel'].add('no_relation')
+        corrupted.relation = self.vocab['rel'].add('no_relation', count=1 if add else 0)
         corrupted.length = len(corrupted.sequence)
         return corrupted if corrupted.length else None
 
@@ -167,10 +167,6 @@ class ConcatenatedDependencyFeaturizer(DependencyFeaturizer):
 
 class SentenceFeaturizer(Featurizer):
 
-    def __init__(self, scope=-1, **vocab_kwargs):
-        super(SentenceFeaturizer, self).__init__(**vocab_kwargs)
-        self.scope = scope
-
     def featurize(self, ex, add=False):
         isbetween = lambda x, start, end: x >= start and x < end
         if isbetween(ex.subject_begin, ex.object_begin, ex.object_end) or isbetween(ex.object_begin, ex.subject_begin, ex.subject_end):
@@ -178,17 +174,12 @@ class SentenceFeaturizer(Featurizer):
 
         first = 'subject' if ex.subject_begin < ex.object_begin else 'object'
         second = 'object' if ex.subject_begin < ex.object_begin else 'subject'
-        chunk0 = ex.words[:ex[first + '_begin']] 
-        chunk1 = chunk0 + [ex[first + '_ner']] 
+        chunk0 = ex.words[:ex[first + '_begin']]
+        chunk1 = chunk0 + ['E1', ex[first + '_ner']] 
         chunk2 = chunk1 + ex.words[ex[first + '_end']:ex[second + '_begin']]
-        sequence = chunk2 + [ex[second + '_ner']] + ex.words[ex[second + '_end']:]
+        sequence = chunk2 + ['E2', ex[second + '_ner']] + ex.words[ex[second + '_end']:]
         first_pos = len(chunk0)
         second_pos = len(chunk2)
-
-        if self.scope > 0:
-            start = max(0, first_pos - self.scope)
-            end = min(len(sequence), second_pos + self.scope + 1)
-            sequence = sequence[start:end]
 
         feat = Example(**{
             'relation': self.vocab['rel'].get(ex.relation, add=add) if ex.relation else None,

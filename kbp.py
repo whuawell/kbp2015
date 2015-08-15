@@ -63,7 +63,6 @@ if __name__ == '__main__':
                 print "\t".join([str(s) for s in [ex.orig.subject_id, rel, ex.orig.object_id, conf]])
 
     for i, ex in enumerate(dev_generator):
-        log.write(str(i) + "\n")
         try:
             feat = featurizer.featurize(ex, add=False)
         except Exception as e:
