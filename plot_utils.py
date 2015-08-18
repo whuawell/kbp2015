@@ -30,6 +30,42 @@ def plot_confusion_matrix(targs, preds, order, labels, title='Confusion Matrix')
     ax.set_xlabel('Predicted label')
     return fig
 
+def plot_precision_recall_curve(y_score, y_targ, n_classes, fname):
+    from sklearn.metrics import precision_recall_curve, average_precision_score
+    # Compute Precision-Recall and plot curve
+    def softmax(a):
+        a -= a.max()
+        e = np.exp(a)
+        return e / e.sum(axis=1, keepdims=True)
+    y_score = softmax(y_score)
+    precision = dict()
+    recall = dict()
+    average_precision = dict()
+    y_test = np.ones((len(y_targ), n_classes))
+    y_test[np.arange(len(y_targ)), y_targ] = 1
+    for i in range(n_classes):
+        precision[i], recall[i], _ = precision_recall_curve(y_test[:, i],
+                                                                      y_score[:, i])
+        average_precision[i] = average_precision_score(y_test[:, i], y_score[:, i])
+
+        # Compute micro-average ROC curve and ROC area
+        precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(),
+                      y_score.ravel())
+        average_precision["micro"] = average_precision_score(y_test, y_score,
+                                                                       average="micro")
+
+        # Plot Precision-Recall curve
+        P.close('all')
+        P.clf()
+        P.plot(recall[0], precision[0], label='Precision-Recall curve')
+        P.xlabel('Recall')
+        P.ylabel('Precision')
+        P.ylim([0.0, 1.05])
+        P.xlim([0.0, 1.0])
+        P.title('Precision-Recall example: AUC={0:0.2f}'.format(average_precision[0]))
+        P.legend(loc="lower left")
+    P.savefig(fname, bbox_inches='tight')
+
 
 def plot_histogram(labels, counts, title='Relation Histogram'):
     fig, ax = P.subplots(figsize=(10, 5))

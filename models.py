@@ -34,8 +34,9 @@ def pretrained_word_emb(vocab, emb_dim):
     word2emb = vocab['word'].load_word2emb()
     word_emb = Embedding(len(vocab['word']), emb_dim)
     W = word_emb.get_weights()[0]
-    for i, word in enumerate(word2emb.keys()):
-        W[i] = word2emb[word]
+    for i, word in enumerate(vocab['word'].index2word):
+        if word in word2emb:
+            W[i] = word2emb[word]
     word_emb.set_weights([W])
     return word_emb
 
@@ -64,11 +65,8 @@ def concatenated(vocab, config):
     graph.add_node(
         RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
         name='RNN2', input='drop1')
-    graph.add_node(Dropout(config.dropout), 'drop2', inputs=['RNN2', 'length_input'], merge_mode='concat')
-    n_additional_features = 1
-    bottle_neck = 10
-    graph.add_node(Dense(n_out + n_additional_features, bottle_neck, W_regularizer=l2(config.reg)), 'dense2', input='drop2')
-    graph.add_node(Dense(bottle_neck, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense3', input='dense2')
+    graph.add_node(Dropout(config.dropout), 'drop2', input='RNN2', merge_mode='concat')
+    graph.add_node(Dense(n_out, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense3', input='drop2')
     graph.add_output(name='p_relation', input='dense3')
 
     return graph, 'p_relation'
@@ -127,6 +125,7 @@ def single_small(vocab, config):
     graph.add_output(name='p_relation', input='dense2')
 
     return graph, 'p_relation'
+
 
 def single_conv(vocab, config):
     RNN = get_rnn(config)

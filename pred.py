@@ -43,7 +43,8 @@ if __name__ == '__main__':
     from train import Trainer
     dev_split = Split(dev_generator, featurizer, add=False)
     scoring_labels = [i for i in xrange(len(featurizer.vocab['rel'])) if i != featurizer.vocab['rel']['no_relation']]
-    trainer = Trainer('.', model, typechecker, scoring_labels)
+    class_weights = {i:1. for i in xrange(len(featurizer.vocab['rel']))}
+    trainer = Trainer('.', model, typechecker, scoring_labels, class_weights=class_weights)
     best_scores = trainer.run_epoch(dev_split, train=False, return_pred=True)
 
     todir = os.path.join(root, 'preds')
@@ -51,7 +52,10 @@ if __name__ == '__main__':
         os.makedirs(todir)
     print 'predictions output at', todir
 
-    from plot_utils import plot_confusion_matrix, plot_histogram, get_sorted_labels, parse_gabor_report, parse_sklearn_report, combine_report, retrieve_wrong_examples
+    with open(os.path.join(todir, 'pred.pkl'), 'wb') as f:
+        pkl.dump(best_scores, f)
+
+    from plot_utils import *
     import json
     from sklearn.metrics import classification_report
 
@@ -63,6 +67,8 @@ if __name__ == '__main__':
     )
     with open(os.path.join(todir, 'wrongs.json'), 'wb') as f:
         json.dump(wrongs, f, indent=2, sort_keys=True)
+
+    plot_precision_recall_curve(best_scores['probs'], best_scores['targs'], len(featurizer.vocab['rel']), os.path.join(todir, 'pr_curve.png'))
 
     sklearn_report = classification_report(
         best_scores['targs'], best_scores['preds'],
@@ -87,6 +93,7 @@ if __name__ == '__main__':
     with open(os.path.join(todir, 'best_scores.json'), 'wb') as f:
         del best_scores['preds']
         del best_scores['targs']
+        del best_scores['probs']
         del best_scores['ids']
         json.dump(best_scores, f, sort_keys=True)
     print 'best scores'

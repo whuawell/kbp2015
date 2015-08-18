@@ -167,17 +167,24 @@ class ConcatenatedDependencyFeaturizer(DependencyFeaturizer):
 
 class SentenceFeaturizer(Featurizer):
 
-    def featurize(self, ex, add=False):
+    def featurize(self, ex, add=False, position=True):
         isbetween = lambda x, start, end: x >= start and x < end
         if isbetween(ex.subject_begin, ex.object_begin, ex.object_end) or isbetween(ex.object_begin, ex.subject_begin, ex.subject_end):
             raise NoPathException(str(ex))
 
         first = 'subject' if ex.subject_begin < ex.object_begin else 'object'
         second = 'object' if ex.subject_begin < ex.object_begin else 'subject'
-        chunk0 = ex.words[:ex[first + '_begin']]
-        chunk1 = chunk0 + ['E1', ex[first + '_ner']] 
-        chunk2 = chunk1 + ex.words[ex[first + '_end']:ex[second + '_begin']]
-        sequence = chunk2 + ['E2', ex[second + '_ner']] + ex.words[ex[second + '_end']:]
+        start = max(0, ex[first + '_begin']-5)
+        end = min(len(ex.words), ex[second + '_end']+5)
+        chunk0 = ex.words[start:ex[first + '_begin']]
+        if position:
+          chunk1 = chunk0 + [first + 'BEGIN', ex[first + '_ner'], first + 'END'] 
+          chunk2 = chunk1 + ex.words[ex[first + '_end']:ex[second + '_begin']]
+          sequence = chunk2 + [second + 'BEGIN', ex[second + '_ner'], second + 'END'] + ex.words[ex[second + '_end']:end]
+        else:
+          chunk1 = chunk0 + [ex[first + '_ner']] 
+          chunk2 = chunk1 + ex.words[ex[first + '_end']:ex[second + '_begin']]
+          sequence = chunk2 + [ex[second + '_ner']] + ex.words[ex[second + '_end']:end]
         first_pos = len(chunk0)
         second_pos = len(chunk2)
 

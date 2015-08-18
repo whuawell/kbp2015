@@ -42,7 +42,7 @@ class Trainer(object):
 
     def run_epoch(self, split, train=False, batch_size=128, return_pred=False):
         total = total_loss = 0
-        ids, preds, targs = [], [], []
+        ids, preds, targs, probs = [], [], [], []
         prog = Progbar(split.num_examples)
         for idx, X, Y, types in split.batches(batch_size):
             X.update({k: np.concatenate([v, types], axis=1) for k, v in Y.items()})
@@ -60,11 +60,13 @@ class Trainer(object):
             ids.append(idx)
             targs.append(targ)
             preds.append(pred)
+            probs.append(prob)
             total_loss += loss
             total += 1
             prog.add(idx.size, values=[('loss', loss), ('acc', np.mean(pred==targ))])
         preds = np.concatenate(preds).astype('int32')
         targs = np.concatenate(targs).astype('int32')
+        probs = np.concatenate(probs).astype('float32')
         ids = np.concatenate(ids).astype('int32')
 
         ret = {
@@ -75,7 +77,7 @@ class Trainer(object):
             'loss': total_loss / float(total),
             }
         if return_pred:
-            ret.update({'ids': ids.tolist(), 'preds': preds.tolist(), 'targs': targs.tolist()})
+            ret.update({'ids': ids.tolist(), 'preds': preds.tolist(), 'targs': targs.tolist(), 'probs':probs})
         return ret
 
     def train(self, train_split, dev_split=None, max_epoch=50):
@@ -162,8 +164,9 @@ if __name__ == '__main__':
     typechecker = TypeCheckAdaptor(os.path.join(mydir, 'data', 'raw', 'typecheck.csv'), dataset.featurizer.vocab)
     rel_vocab = dataset.featurizer.vocab['rel']
     scoring_labels = [i for i in xrange(len(rel_vocab)) if i != rel_vocab['no_relation']]
-    class_weights = {i:1./rel_vocab.counts[rel_vocab.index2word[i]] for i in xrange(len(rel_vocab))}
-    class_weights[dataset.featurizer.vocab['rel']['no_relation']] *= 10.
+    #class_weights = {i:1./rel_vocab.counts[rel_vocab.index2word[i]] for i in xrange(len(rel_vocab))}
+    #class_weights[dataset.featurizer.vocab['rel']['no_relation']] *= 1.
+    class_weights = {i:1. for i in xrange(len(rel_vocab))}
 
     invalids = dataset.train.remove_invalid_examples(typechecker)
     print 'removed', len(invalids), 'invalid training examples'

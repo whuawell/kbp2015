@@ -33,6 +33,6 @@ class Config(dict):
             'reg': 1e-4,
             'optim': 'rmsprop',
             'lr': 1e-2,
-            'max_epoch': 100,
-            'num_corrupt': 0,
+            'max_epoch': 50,
+            'num_corrupt': 1,
         })
