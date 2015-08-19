@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import sys
 mydir = os.path.dirname(os.path.abspath(__file__))
 import numpy as np
 from utils import np_softmax
@@ -35,7 +36,8 @@ class Cache(object):
 mydir = os.path.dirname(os.path.abspath(__file__))
 
 if __name__ == '__main__':
-    root = os.path.join(mydir, 'experiments', 'deploy')
+    experiment = sys.argv[1]
+    root = os.path.join(mydir, experiment)
     config = Config.load(os.path.join(root, 'config.json'))
     with open(os.path.join(root, 'featurizer.pkl')) as f:
         featurizer = pkl.load(f)
@@ -52,6 +54,7 @@ if __name__ == '__main__':
     def process_cache(cache):
         for length, examples in cache.batches():
             X, Y, types = featurizer.to_matrix(examples)
+            X['length_input'] = np.ones((X['word_input'].shape[0], 1)) * X['word_input'].shape[1]
             prob = model.predict(X, verbose=0)['p_relation']
             prob *= typechecker.get_valid_cpu(types[:, 0], types[:, 1])
             pred = prob.argmax(axis=1)

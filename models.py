@@ -32,7 +32,7 @@ def get_rnn(config):
 
 def pretrained_word_emb(vocab, emb_dim):
     word2emb = vocab['word'].load_word2emb()
-    word_emb = Embedding(len(vocab['word']), emb_dim)
+    word_emb = Embedding(len(vocab['word']), emb_dim, W_constraint=UnitNorm())
     W = word_emb.get_weights()[0]
     for i, word in enumerate(vocab['word'].index2word):
         if word in word2emb:
@@ -97,8 +97,7 @@ def single(vocab, config):
     n_additional_features = 1
     bottle_neck = 10
     graph.add_node(Dropout(config.dropout), 'drop2', inputs=['RNN2', 'length_input'])
-    graph.add_node(Dense(n_out + n_additional_features, bottle_neck, W_regularizer=l2(config.reg)), 'dense2', input='drop2')
-    graph.add_node(Dense(bottle_neck, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense3', input='dense2')
+    graph.add_node(Dense(bottle_neck, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense3', input='drop2')
     graph.add_output(name='p_relation', input='dense3')
 
     return graph, 'p_relation'

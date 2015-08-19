@@ -195,13 +195,14 @@ class SelfTrainingAdaptor(KBPEvaluationDataAdaptor):
 
 class AllAnnotatedAdaptor(DatasetAdaptor):
 
-    def __init__(self):
+    def __init__(self, neg='0'):
         super(AllAnnotatedAdaptor, self).__init__()
         self.supervised = SupervisedDataAdaptor()
         self.annotated = SelfTrainingAdaptor()
+        self.annotated_fname = os.path.join(rawdir, 'self_training.' + neg + '.tsv')
 
     def to_examples(self, fname=None):
         for ex in self.supervised.to_examples():
             yield ex
-        for ex in self.annotated.to_examples():
+        for ex in self.annotated.to_examples(self.annotated_fname):
             yield ex

@@ -167,15 +167,15 @@ class ConcatenatedDependencyFeaturizer(DependencyFeaturizer):
 
 class SentenceFeaturizer(Featurizer):
 
-    def featurize(self, ex, add=False, position=True):
+    def featurize(self, ex, add=False, position=True, clip=None):
         isbetween = lambda x, start, end: x >= start and x < end
         if isbetween(ex.subject_begin, ex.object_begin, ex.object_end) or isbetween(ex.object_begin, ex.subject_begin, ex.subject_end):
             raise NoPathException(str(ex))
 
         first = 'subject' if ex.subject_begin < ex.object_begin else 'object'
         second = 'object' if ex.subject_begin < ex.object_begin else 'subject'
-        start = max(0, ex[first + '_begin']-5)
-        end = min(len(ex.words), ex[second + '_end']+5)
+        start = 0 if clip is None else max(0, ex[first + '_begin']-clip) 
+        end = len(ex.words) if clip is None else min(len(ex.words), ex[second + '_end']+clip)
         chunk0 = ex.words[start:ex[first + '_begin']]
         if position:
           chunk1 = chunk0 + [first + 'BEGIN', ex[first + '_ner'], first + 'END'] 

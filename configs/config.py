@@ -35,4 +35,5 @@ class Config(dict):
             'lr': 1e-2,
             'max_epoch': 50,
             'num_corrupt': 1,
+            'neg': '0',
         })

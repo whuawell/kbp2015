@@ -126,7 +126,7 @@ if __name__ == '__main__':
             if isinstance(config[k], float): v = float(v)
             config[k] = v
 
-    config.data = '_'.join([config.train, config.dev, config.featurizer, 'corrupt' + str(config.num_corrupt)])
+    config.data = '_'.join([config.train, config.dev, config.featurizer, 'corrupt' + str(config.num_corrupt) + str(config.neg)])
     data_dir = os.path.join(mydir, 'data', 'saves', config.data)
     if os.path.isdir(data_dir):
         dataset = Dataset.load(data_dir)
@@ -134,7 +134,7 @@ if __name__ == '__main__':
         datasets = {
             'supervised': SupervisedDataAdaptor(),
             'kbp_eval': KBPEvaluationDataAdaptor(),
-            'all_annotated': AllAnnotatedAdaptor(),
+            'all_annotated': AllAnnotatedAdaptor(config.neg),
             'self_training': SelfTrainingAdaptor(),
         }
         train_generator = datasets[config.train].to_examples()
@@ -197,6 +197,7 @@ if __name__ == '__main__':
         del best_scores['preds']
         del best_scores['targs']
         del best_scores['ids']
+        del best_scores['probs']
         json.dump(best_scores, f, sort_keys=True)
     print 'best scores'
     pprint(best_scores)
