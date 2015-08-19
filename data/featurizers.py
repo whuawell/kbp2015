@@ -176,12 +176,14 @@ class SentenceFeaturizer(Featurizer):
         second = 'object' if ex.subject_begin < ex.object_begin else 'subject'
         start = 0 if clip is None else max(0, ex[first + '_begin']-clip) 
         end = len(ex.words) if clip is None else min(len(ex.words), ex[second + '_end']+clip)
-        chunk0 = ex.words[start:ex[first + '_begin']]
         if position:
+          chunk0 = ex.words[start:ex[first + '_begin']]
           chunk1 = chunk0 + [first + 'BEGIN', ex[first + '_ner'], first + 'END'] 
           chunk2 = chunk1 + ex.words[ex[first + '_end']:ex[second + '_begin']]
           sequence = chunk2 + [second + 'BEGIN', ex[second + '_ner'], second + 'END'] + ex.words[ex[second + '_end']:end]
         else:
+          chunk0 = ex.words[:ex[first + '_begin']]
+          chunk1 = chunk0 + [first + 'BEGIN', ex[first + '_ner'], first + 'END'] 
           chunk1 = chunk0 + [ex[first + '_ner']] 
           chunk2 = chunk1 + ex.words[ex[first + '_end']:ex[second + '_begin']]
           sequence = chunk2 + [ex[second + '_ner']] + ex.words[ex[second + '_end']:end]

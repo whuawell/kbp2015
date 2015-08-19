@@ -39,13 +39,13 @@ class DatasetAdaptor(object):
         ex.object = ' '.join(ex.words[ex.object_begin:ex.object_end])
         ex.dependency = self.parse_dependency(ex.dependency, ex)
 
-        #if ex.subject_ner not in ['NUMBER', 'DATE']:
-        #    for i in xrange(ex.subject_begin, ex.subject_end):
-        #        ex.ner[i] = ex.subject_ner
+        if ex.subject_ner not in ['NUMBER', 'DATE']:
+            for i in xrange(ex.subject_begin, ex.subject_end):
+                ex.ner[i] = ex.subject_ner
 
-        #if ex.object_ner not in ['NUMBER', 'DATE']:
-        #    for i in xrange(ex.object_begin, ex.object_end):
-        #        ex.ner[i] = ex.object_ner
+        if ex.object_ner not in ['NUMBER', 'DATE']:
+            for i in xrange(ex.object_begin, ex.object_end):
+                ex.ner[i] = ex.object_ner
 
         if not hasattr(ex, 'relation'):
             ex.relation = None

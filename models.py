@@ -71,6 +71,35 @@ def concatenated(vocab, config):
 
     return graph, 'p_relation'
 
+def single_small_old(vocab, config):
+    RNN = get_rnn(config)
+
+    graph = Graph()
+    graph.add_input(name='word_input', ndim=2, dtype='int')
+
+    graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
+    graph.add_node(Dropout(config.dropout), 'drop0', input='word_emb')
+
+    n_in = config.emb_dim
+    n_out = config.hidden[0]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=True),
+        name='RNN1', input='drop0')
+    graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
+
+    n_in = n_out
+    n_out = config.hidden[1]
+    graph.add_node(
+        RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
+        name='RNN2', input='drop1')
+
+    graph.add_node(Dropout(config.dropout), 'drop2', input='RNN2')
+    graph.add_node(Dense(n_out, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense3', input='drop2')
+    graph.add_output(name='p_relation', input='dense3')
+
+    return graph, 'p_relation'
+
+
 def single(vocab, config):
     RNN = get_rnn(config)
 
@@ -94,10 +123,8 @@ def single(vocab, config):
         RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
         name='RNN2', input='drop1')
 
-    n_additional_features = 1
-    bottle_neck = 10
     graph.add_node(Dropout(config.dropout), 'drop2', inputs=['RNN2', 'length_input'])
-    graph.add_node(Dense(bottle_neck, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense3', input='drop2')
+    graph.add_node(Dense(n_out+1, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense3', input='drop2')
     graph.add_output(name='p_relation', input='dense3')
 
     return graph, 'p_relation'
@@ -107,7 +134,7 @@ def single_small(vocab, config):
 
     graph = Graph()
     graph.add_input(name='word_input', ndim=2, dtype='int')
-    graph.add_input(name='length_input', ndim=2, dtype='float')
+    #graph.add_input(name='length_input', ndim=2, dtype='float')
 
     graph.add_node(pretrained_word_emb(vocab, config.emb_dim), name='word_emb', input='word_input')
     graph.add_node(Dropout(config.dropout), 'drop0', input='word_emb')
@@ -118,8 +145,10 @@ def single_small(vocab, config):
         RNN(n_in, n_out, truncate_gradient=config.truncate_gradient, return_sequences=False),
         name='RNN1', input='drop0')
     # add in the additional features
-    n_additional_features = 1
-    graph.add_node(Dropout(config.dropout), 'drop1', inputs=['RNN1', 'length_input'], merge_mode='concat')
+    #n_additional_features = 1
+    #graph.add_node(Dropout(config.dropout), 'drop1', inputs=['RNN1', 'length_input'], merge_mode='concat')
+    n_additional_features = 0
+    graph.add_node(Dropout(config.dropout), 'drop1', input='RNN1')
     graph.add_node(Dense(n_out+n_additional_features, len(vocab['rel']), W_regularizer=l2(config.reg)), 'dense2', input='drop1')
     graph.add_output(name='p_relation', input='dense2')
 
