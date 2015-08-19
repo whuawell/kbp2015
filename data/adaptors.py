@@ -96,7 +96,7 @@ class KBPDataAdaptor(DatasetAdaptor):
         return parsed
 
     def to_example(self, row):
-        assert len(row) == len(self.headers), "could not convert row to example %s\n%s" % (row, self.headers)
+        # assert len(row) == len(self.headers), "could not convert row to example %s\n%s" % (row, self.headers)
         d = dict(zip(self.headers, row))
         ex = Example(**d)
         for k in ['dependency', 'dep_extra', 'dep_malt']:

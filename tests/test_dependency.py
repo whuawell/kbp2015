@@ -24,7 +24,7 @@ class TestDependencyParse(unittest.TestCase):
         for i, tup in enumerate(self.dep):
             child, parent, arc = tup
             if arc == 'root':
-                self.dep[i] = (self.words.index(child), 0, 'root')
+                self.dep[i] = (self.words.index(child), -1, 'root')
             else:
                 self.dep[i] = (self.words.index(child), self.words.index(parent), arc)
 
@@ -32,9 +32,8 @@ class TestDependencyParse(unittest.TestCase):
         parse = DependencyParse(self.dep, enhanced=True)
         shortest = parse.get_path_from_parse(2, 4, 5, 6)
         self.assertEqual(shortest, [
-            [self.words.index('curry'), self.words.index('had'), 'dobj_from'],
-            [self.words.index('had'), None, 'root'],
-            [self.words.index('had'), self.words.index('Curry'), 'nsubj_to'],
+            (self.words.index('curry'), self.words.index('had'), 'dobj_from'),
+            (self.words.index('had'), self.words.index('Curry'), 'nsubj_to'),
         ])
 
     def test_shorest_real(self):
@@ -49,7 +48,7 @@ class TestDependencyParse(unittest.TestCase):
         shortest = parse.get_path_from_parse(ex.subject_begin, ex.subject_end, ex.object_begin, ex.object_end)
 
         self.assertEqual(shortest, [
-            [ex.words.index('berkeley'), ex.words.index('baker'), 'nmod:in_from'],
+            (ex.words.index('berkeley'), ex.words.index('baker'), 'nmod:in_from'),
         ])
 
 if __name__ == '__main__':

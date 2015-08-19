@@ -1,5 +1,3 @@
-from pattern.graph import Graph, Node, Edge
-
 import json
 
 
@@ -7,79 +5,84 @@ class NoPathException(Exception):
     pass
 
 
+class TreeNode(object):
+
+    def __init__(self, word):
+        self.word = int(word)
+        self.parent = None
+        self.edge_to_parent = None
+
+    def __repr__(self):
+        return str(self.word)
+
+    def add_child(self, child, edge):
+        child.parent = self
+        child.edge_to_parent = edge
+
+    def shortest_path(self, another):
+        seen = set()
+        my_path = []
+        curr = self
+        while curr:
+            if curr in seen:
+                raise NoPathException('found cycle!')
+            my_path += [curr]
+            seen.add(curr)
+            curr = curr.parent
+        another_path = []
+        curr = another
+        common_ancestor = None
+        while curr:
+            if curr in seen:
+                common_ancestor = curr
+                break
+            another_path += [curr]
+            curr = curr.parent
+        if common_ancestor is None:
+            raise NoPathException('no path between nodes')
+        path = []
+        for node in my_path:
+            if node == common_ancestor:
+                break
+            path += [(node.word, node.parent.word, node.edge_to_parent + '_from')]
+        for node in reversed(another_path):
+            path += [(node.parent.word, node.word, node.edge_to_parent + '_to')]
+        return path
+
+
 class DependencyParse(object):
 
     def __init__(self, parse, enhanced=True):
         self.parse = parse
-        self.g, self.edge, self.node, self.root = DependencyParse.make_graph(self.parse, enhanced)
+        self.node_map = DependencyParse.make_graph(self.parse, enhanced)
 
     @classmethod
     def make_graph(cls, parse, enhanced=True):
-        edge_map, node_map = {}, {}
-        g = Graph()
-        root = None
+        node_map = {}
         for child, parent, arc in parse:
-            if arc == 'root':
-                root = child
             if not enhanced:
                 arc = arc.split(':')[0]
             if child not in node_map:
-                node_map[child] = Node(child)
-            child = node_map[child]
+                node_map[child] = TreeNode(child)
             if parent not in node_map:
-                node_map[parent] = Node(parent)
-            parent = node_map[parent]
-            if parent.id != child.id:
-                g.add_edge(parent, child, type=arc)
-        return g, edge_map, node_map, root
+                node_map[parent] = TreeNode(parent)
+            node_map[parent].add_child(node_map[child], arc)
+        return node_map
 
-    @classmethod
-    def parent_of(cls, node):
-        parents = [e.node1 for e in node.edges if e.node2 == node]
-        return parents[0] if len(parents) else None
-
-    @classmethod
-    def get_head(cls, ent_tail, ent_start, ent_end):
+    def get_head(self, ent_tail, ent_start, ent_end):
         seen = set()
+        curr = self.node_map[ent_tail]
         while True:
-            parent = cls.parent_of(ent_tail)
+            parent = curr.parent
             if parent in seen:
-                raise Exception("found cycle!")
-            if parent is None or parent.id >= ent_end or parent.id < ent_start:
+                raise NoPathException("found cycle!")
+            if parent is None or parent.word >= ent_end or parent.word < ent_start:
                 break
             seen.add(parent)
             ent_tail = parent
-        return ent_tail
-
-    @classmethod
-    def get_edge(cls, node1, node2):
-        edges = []
-        for edge in node1.edges:
-            if edge.node1 == node2:
-                edges.append(edge.type + '_from')
-            elif edge.node2 == node2:
-                edges.append(edge.type + '_to')
-        return edges
-
-    def get_path(self, node1, node2, g):
-        path = g.shortest_path(node1, node2, directed=False)
-        if path is None:
-            raise NoPathException("cannot find path between entities!")
-        curr = node1
-        edges = []
-        for node in path[1:]:
-            if curr.id == self.root:
-                edges.append([curr.id, None, 'root'])
-            edge = self.get_edge(curr, node)[0]
-            edges.append([curr.id, node.id, edge])
-            curr = node
-        return edges
+        return self.node_map[ent_tail]
 
     def get_path_from_parse(self, subject_start, subject_end, object_start, object_end):
-        subject = self.node[subject_end-1], subject_start, subject_end
-        object = self.node[object_end-1], object_start, object_end
-        return self.get_path(
-            DependencyParse.get_head(*object),
-            DependencyParse.get_head(*subject),
-            self.g
-        )
+        subject = subject_end-1, subject_start, subject_end
+        object = object_end-1, object_start, object_end
+        return self.get_head(*object).shortest_path(self.get_head(*subject))
